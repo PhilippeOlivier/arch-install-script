@@ -216,8 +216,7 @@ boot_mode
 set_system_clock
 partition_drive
 format_boot_partition
-# echo "Sleeping for 20 secs"
-# sleep 20
 encrypt_format_root_partition
-create_btrfs_subvolumes
-install_base_packages
+
+# create_btrfs_subvolumes
+# install_base_packages
