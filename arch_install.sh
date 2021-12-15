@@ -150,8 +150,11 @@ encrypt_format_root_partition() {
 	echo "Encrypting and formatting root partition ${ROOT_PARTITION}... "
 	# NOTE: changed echo -en to just echo
 	# note: try with and without the "-" at the end of the two following lines
-	echo "${LUKS_PASSPHRASE}" | cryptsetup luksFormat "${ROOT_PARTITION}"
-	echo "${LUKS_PASSPHRASE}" | cryptsetup open "${ROOT_PARTITION}" "${LUKS_MAPPER}"
+	echo "1-ASDFASDFASDF"
+	echo "${LUKS_PASSPHRASE}" | cryptsetup luksFormat "${ROOT_PARTITION}" -
+	echo "2-ASDFASDFASDF"
+	echo "${LUKS_PASSPHRASE}" | cryptsetup open "${ROOT_PARTITION}" "${LUKS_MAPPER}" -
+	echo "3-ASDFASDFASDF"
 	mkfs.btrfs "/dev/mapper/${LUKS_MAPPER}"
 }
 
