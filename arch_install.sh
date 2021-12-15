@@ -6,7 +6,8 @@
 
 
 DRIVE="/dev/sda" # TODO: CHANGE TO /dev/nm...
-MAPPING="cryptroot"
+LUKS_MAPPING="cryptroot"
+LUKS_PASSPHRASE=""
 
 
 ################################################################################
@@ -81,7 +82,7 @@ boot_mode() {
 # Outputs:
 #   General status
 ###############################################################################
-system_clock() {
+set_system_clock() {
 	echo -n "Updating system clock and synching time... "
 	systemctl enable systemd-timesyncd.service
     systemctl start systemd-timesyncd.service
@@ -126,29 +127,80 @@ format_boot_partition() {
 }
 
 
+################################################################################
+# Encrypts and formats the root partition.
+# Globals:
+#   LUKS_PASSPHRASE
+#   LUKS_MAPPER
+#   ROOT_PARTITION
+# Arguments:
+#   None
+# Outputs:
+#   General status
+###############################################################################
+encrypt_format_root_partition() {
+	echo "Enter the LUKS passphrase: "
+    stty -echo
+    read LUKS_PASSPHRASE
+    stty echo
+
+	echo -n "Encrypting and formatting root partition ${ROOT_PARTITION}... "
+	echo -en "${LUKS_PASSPHRASE}" | cryptsetup luksFormat "${ROOT_PARTITION}"
+	echo -en "${LUKS_PASSPHRASE}" | cryptsetup open "${ROOT_PARTITION}" "${LUKS_MAPPER}"
+	mkfs.btrfs "/dev/mapper/${LUKS_MAPPER}"
+	echo "OK."
+}
+
+
+################################################################################
+# Creates Btrfs subvolumes.
+# Globals:
+#   LUKS_MAPPER
+# Arguments:
+#   None
+# Outputs:
+#   General status
+###############################################################################
+create_btrfs_subvolumes() {
+	echo -n "Creating Btrfs subvolumes... "
+	mount "/dev/mapper/${LUKS_MAPPER}" "/mnt"
+	btrfs subvolume create "/mnt/@"
+	btrfs subvolume create "/mnt/@home"
+	umount "/mnt"
+	echo "OK."
+}
+
+
+################################################################################
+# Installs base packages.
+# Globals:
+#   LUKS_MAPPER
+# Arguments:
+#   None
+# Outputs:
+#   General status
+###############################################################################
+install_base_packages() {
+	local mount_options
+	# TODO: Look at the following options and make sure that this is what I want.
+	mount_options="noatime,nodiratime,compress=zstd:1,space_cache,ssd"
+	echo -n "Creating Btrfs subvolumes... "
+	mount -o "${mount_options},subvol=@" "/dev/mapper/${LUKS_MAPPER}" "/mnt"
+	mkdir -p /mnt/{boot,home}
+	mount -o "${mount_options},subvol=@home" "/dev/mapper/${LUKS_MAPPER}" "/mnt/home"
+	mount "${BOOT_PARTITION}" "/mnt/boot"
+	pacstrap /mnt base base-devel btrfs-progs intel-ucode linux linux-firmware linux-lts vim
+	genfstab -U /mnt >> /mnt/etc/fstab
+	echo "OK."
+}
+
+
 identify_partitions
 internet_connectivity
 boot_mode
-# system_clock
+# set_system_clock
 # partition_drive
 # format_boot_partition
-
-
-
-
-# # Encrypt and format the root partition
-# cryptsetup luksFormat $ROOT_PART
-# cryptsetup open $ROOT_PART cryptroot
-# mkfs.btrfs /dev/mapper/cryptroot
-
-# # Mount the file systems and create the subvolumes.
-# mount /dev/mapper/cryptroot /mnt
-# btrfs subvolume create /mnt/@
-# btrfs subvolume create /mnt/@home
-# umount /mnt
-
-# # TODO: modify options below eventually
-# mount -o noatime,nodiratime,compress=zstd:1,space_cache,ssd,subvol=@ /dev/mapper/cryptroot /mnt
-# mkdir -p /mnt/{boot,home}
-# mount -o noatime,nodiratime,compress=zstd:1,space_cache,ssd,subvol=@home /dev/mapper/cryptroot /mnt/home
-# mount /dev/nvme0n1p1 /mnt/boot
+# encrypt_format_root_partition
+# create_btrfs_subvolumes
+# install_base_packages
