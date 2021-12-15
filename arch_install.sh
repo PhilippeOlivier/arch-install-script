@@ -14,6 +14,9 @@ DRIVE="/dev/sda" # TODO: CHANGE TO /dev/nm...
 LUKS_MAPPING="cryptroot"
 LUKS_PASSPHRASE=""
 
+# TEMP:
+wipefs -a /dev/sda1 /dev/sda2 /dev/sda
+
 
 ################################################################################
 # Identifies drive partitions.
@@ -93,8 +96,7 @@ set_system_clock() {
     systemctl start systemd-timesyncd.service
 	timedatectl set-ntp true
 	# Wait until those actions are complete before continuing.
-	read -n 1 -s -r -p "Wait for the actions to complete, then press any key to continue..."
-	# Alternative: sleep 10
+	sleep 10
 }
 
 
@@ -154,10 +156,10 @@ encrypt_format_root_partition() {
 	# NOTE: changed echo -en to just echo
 	# note: try with and without the "-" at the end of the two following lines
 	echo "1-ASDFASDFASDF"
-	echo "${LUKS_PASSPHRASE}" | cryptsetup luksFormat "${ROOT_PARTITION}" -
+	echo "${LUKS_PASSPHRASE}" | cryptsetup luksFormat "${ROOT_PARTITION}" -d -
 	echo "2-ASDFASDFASDF"
 	sleep 5
-	echo "${LUKS_PASSPHRASE}" | cryptsetup luksOpen "${ROOT_PARTITION}" "${LUKS_MAPPER}" -
+	echo "${LUKS_PASSPHRASE}" | cryptsetup luksOpen "${ROOT_PARTITION}" "${LUKS_MAPPER}" -d -
 	sleep 5
 	echo "3-ASDFASDFASDF"
 	mkfs.btrfs "/dev/mapper/${LUKS_MAPPER}"
