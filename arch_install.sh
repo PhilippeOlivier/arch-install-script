@@ -92,6 +92,9 @@ set_system_clock() {
 	systemctl enable systemd-timesyncd.service
     systemctl start systemd-timesyncd.service
 	timedatectl set-ntp true
+	# Wait until those actions are complete before continuing.
+	read -n 1 -s -r -p "Wait for the actions to complete, then press any key to continue..."
+	# Alternative: sleep 10
 }
 
 
@@ -153,9 +156,9 @@ encrypt_format_root_partition() {
 	echo "1-ASDFASDFASDF"
 	echo "${LUKS_PASSPHRASE}" | cryptsetup luksFormat "${ROOT_PARTITION}" -
 	echo "2-ASDFASDFASDF"
-	sleep 3
-	echo "${LUKS_PASSPHRASE}" | cryptsetup open "${ROOT_PARTITION}" "${LUKS_MAPPER}" -
-	sleep 3
+	sleep 5
+	echo "${LUKS_PASSPHRASE}" | cryptsetup luksOpen "${ROOT_PARTITION}" "${LUKS_MAPPER}" -
+	sleep 5
 	echo "3-ASDFASDFASDF"
 	mkfs.btrfs "/dev/mapper/${LUKS_MAPPER}"
 }
