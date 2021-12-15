@@ -153,7 +153,9 @@ encrypt_format_root_partition() {
 	echo "1-ASDFASDFASDF"
 	echo "${LUKS_PASSPHRASE}" | cryptsetup luksFormat "${ROOT_PARTITION}" -
 	echo "2-ASDFASDFASDF"
+	sleep 3
 	echo "${LUKS_PASSPHRASE}" | cryptsetup open "${ROOT_PARTITION}" "${LUKS_MAPPER}" -
+	sleep 3
 	echo "3-ASDFASDFASDF"
 	mkfs.btrfs "/dev/mapper/${LUKS_MAPPER}"
 }
