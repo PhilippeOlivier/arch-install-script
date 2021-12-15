@@ -4,6 +4,11 @@
 # Make sure to follow the official installation guide in parallel to this one, in case some things
 # changed in the official guide. If so, update the current guide.
 
+# use shorturl.at to shorten this url, then: curl -L THEURL > install.sh, and then sh install.sh
+
+# to wipe everything beforehand, example:
+# wipefs -a /dev/sda1 /dev/sda2 /dev/sda
+
 
 DRIVE="/dev/sda" # TODO: CHANGE TO /dev/nm...
 LUKS_MAPPING="cryptroot"
@@ -143,8 +148,8 @@ encrypt_format_root_partition() {
     stty echo
 
 	echo "Encrypting and formatting root partition ${ROOT_PARTITION}... "
-	echo -en "${LUKS_PASSPHRASE}" | cryptsetup luksFormat "${ROOT_PARTITION}"
-	echo -en "${LUKS_PASSPHRASE}" | cryptsetup open "${ROOT_PARTITION}" "${LUKS_MAPPER}"
+	echo -en "${LUKS_PASSPHRASE}" | cryptsetup luksFormat "${ROOT_PARTITION}" -
+	echo -en "${LUKS_PASSPHRASE}" | cryptsetup open "${ROOT_PARTITION}" "${LUKS_MAPPER}" -
 	mkfs.btrfs "/dev/mapper/${LUKS_MAPPER}"
 }
 
