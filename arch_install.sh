@@ -13,8 +13,8 @@ LUKS_PASSPHRASE=""
 ################################################################################
 # Identifies drive partitions.
 # Globals:
-#   DRIVE
 #   BOOT_PARTITION
+#   DRIVE
 #   ROOT_PARTITION
 # Arguments:
 #   None
@@ -83,11 +83,10 @@ boot_mode() {
 #   General status
 ###############################################################################
 set_system_clock() {
-	echo -n "Updating system clock and synching time... "
+	echo "Updating system clock and synching time... "
 	systemctl enable systemd-timesyncd.service
     systemctl start systemd-timesyncd.service
 	timedatectl set-ntp true
-	echo "OK."
 }
 
 
@@ -121,17 +120,16 @@ partition_drive() {
 #   General status
 ###############################################################################
 format_boot_partition() {
-	echo -n "Formatting boot partition ${BOOT_PARTITION}... "
+	echo "Formatting boot partition ${BOOT_PARTITION}... "
 	mkfs.vfat -F 32 "${BOOT_PARTITION}"
-	echo "OK."
 }
 
 
 ################################################################################
 # Encrypts and formats the root partition.
 # Globals:
-#   LUKS_PASSPHRASE
 #   LUKS_MAPPER
+#   LUKS_PASSPHRASE
 #   ROOT_PARTITION
 # Arguments:
 #   None
@@ -144,11 +142,10 @@ encrypt_format_root_partition() {
     read LUKS_PASSPHRASE
     stty echo
 
-	echo -n "Encrypting and formatting root partition ${ROOT_PARTITION}... "
+	echo "Encrypting and formatting root partition ${ROOT_PARTITION}... "
 	echo -en "${LUKS_PASSPHRASE}" | cryptsetup luksFormat "${ROOT_PARTITION}"
 	echo -en "${LUKS_PASSPHRASE}" | cryptsetup open "${ROOT_PARTITION}" "${LUKS_MAPPER}"
 	mkfs.btrfs "/dev/mapper/${LUKS_MAPPER}"
-	echo "OK."
 }
 
 
@@ -174,6 +171,7 @@ create_btrfs_subvolumes() {
 ################################################################################
 # Installs base packages.
 # Globals:
+#   BOOT_PARTITION
 #   LUKS_MAPPER
 # Arguments:
 #   None
@@ -198,9 +196,9 @@ install_base_packages() {
 identify_partitions
 internet_connectivity
 boot_mode
-# set_system_clock
-# partition_drive
-# format_boot_partition
-# encrypt_format_root_partition
-# create_btrfs_subvolumes
-# install_base_packages
+set_system_clock
+partition_drive
+format_boot_partition
+encrypt_format_root_partition
+create_btrfs_subvolumes
+install_base_packages
