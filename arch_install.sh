@@ -148,8 +148,10 @@ encrypt_format_root_partition() {
     stty echo
 
 	echo "Encrypting and formatting root partition ${ROOT_PARTITION}... "
-	echo -en "${LUKS_PASSPHRASE}" | cryptsetup luksFormat "${ROOT_PARTITION}" -
-	echo -en "${LUKS_PASSPHRASE}" | cryptsetup open "${ROOT_PARTITION}" "${LUKS_MAPPER}" -
+	# NOTE: changed echo -en to just echo
+	# note: try with and without the "-" at the end of the two following lines
+	echo "${LUKS_PASSPHRASE}" | cryptsetup luksFormat "${ROOT_PARTITION}"
+	echo "${LUKS_PASSPHRASE}" | cryptsetup open "${ROOT_PARTITION}" "${LUKS_MAPPER}"
 	mkfs.btrfs "/dev/mapper/${LUKS_MAPPER}"
 }
 
@@ -204,6 +206,8 @@ boot_mode
 set_system_clock
 partition_drive
 format_boot_partition
-# encrypt_format_root_partition
-# create_btrfs_subvolumes
-# install_base_packages
+# echo "Sleeping for 20 secs"
+# sleep 20
+encrypt_format_root_partition
+create_btrfs_subvolumes
+install_base_packages
