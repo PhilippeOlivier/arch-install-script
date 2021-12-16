@@ -156,11 +156,11 @@ encrypt_format_root_partition() {
 	# NOTE: changed echo -en to just echo
 	# note: try with and without the "-" at the end of the two following lines
 	echo "1-luksFormat"
-	echo -e "${LUKS_PASSPHRASE}" | cryptsetup luksFormat --type luks2 "${ROOT_PARTITION}" -d -
+	echo -en "${LUKS_PASSPHRASE}" | cryptsetup luksFormat --type luks2 "${ROOT_PARTITION}" -d -
 	echo "${LUKS_PASSPHRASE}"
 	# echo "2-luks open"
 	# sleep 5
-	# echo "${LUKS_PASSPHRASE}" | cryptsetup open --type luks2 "${ROOT_PARTITION}" "${LUKS_MAPPER}" -d -
+	echo -en "${LUKS_PASSPHRASE}" | cryptsetup open --type luks2 "${ROOT_PARTITION}" "${LUKS_MAPPER}" -d -
 	# sleep 5
 	#TODO: only do luksformat automatically, then try to open manually
 	# TODO: try to set passphrase manually in the script, and see if things change
