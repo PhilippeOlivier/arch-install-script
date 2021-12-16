@@ -158,6 +158,8 @@ encrypt_format_root_partition() {
 	echo "1-luksFormat"
 	echo -en "${LUKS_PASSPHRASE}" | cryptsetup luksFormat --type luks2 "${ROOT_PARTITION}" -d -
 	echo "${LUKS_PASSPHRASE}"
+	echo "2.5-dmsetup remove"
+	dmsetup remove "${LUKS_MAPPER}"
 	echo "2-luks open"
 	sleep 5
 	echo -en "${LUKS_PASSPHRASE}" | cryptsetup open --type luks2 "${ROOT_PARTITION}" "${LUKS_MAPPER}" -d -
