@@ -147,21 +147,15 @@ format_boot_partition() {
 #   General status
 ###############################################################################
 encrypt_format_root_partition() {
-	# echo "Enter the LUKS passphrase: "
-    # stty -echo
-    # read LUKS_PASSPHRASE
-    # stty echo
+	echo "Enter the LUKS passphrase: "
+    stty -echo
+    read LUKS_PASSPHRASE
+    stty echo
 
 	echo "Encrypting and formatting root partition ${ROOT_PARTITION}... "
-	# NOTE: changed echo -en to just echo
-	# note: try with and without the "-" at the end of the two following lines
 	echo "1-luksFormat"
 	echo -en "${LUKS_PASSPHRASE}" | cryptsetup luksFormat --type luks2 "${ROOT_PARTITION}" -d -
-	echo "${LUKS_PASSPHRASE}"
-	echo "2.5-dmsetup remove"
-	dmsetup remove "${LUKS_MAPPER}"
 	echo "2-luks open"
-	sleep 5
 	echo -en "${LUKS_PASSPHRASE}" | cryptsetup open --type luks2 "${ROOT_PARTITION}" "${LUKS_MAPPER}" -d -
 	# sleep 5
 	#TODO: only do luksformat automatically, then try to open manually
@@ -219,7 +213,7 @@ install_base_packages() {
 identify_partitions
 internet_connectivity
 boot_mode
-set_system_clock
+# set_system_clock
 partition_drive
 format_boot_partition
 encrypt_format_root_partition
