@@ -156,9 +156,10 @@ encrypt_format_root_partition() {
 
 	echo "Encrypting and formatting root partition ${ROOT_PARTITION}... "
 	echo "1-luksFormat"
-	echo -en "${LUKS_PASSPHRASE}" | cryptsetup luksFormat --type luks2 "${ROOT_PARTITION}" -d -
+	echo -n "${LUKS_PASSPHRASE}" | cryptsetup luksFormat --type luks2 "${ROOT_PARTITION}" -d -
 	echo "2-luks open"
-	echo -en "${LUKS_PASSPHRASE}" | cryptsetup open --type luks2 "${ROOT_PARTITION}" "${LUKS_MAPPER}" -d -
+	echo -n "${LUKS_PASSPHRASE}" | cryptsetup open --type luks2 "${ROOT_PARTITION}" "${LUKS_MAPPER}" -d -
+	# device-mapper: create ioctl on CRYPT-LUKS2-[uuid_of_the_partition]- failed: Invalid argument
 	# sleep 5
 	#TODO: only do luksformat automatically, then try to open manually
 	# TODO: try to set passphrase manually in the script, and see if things change
