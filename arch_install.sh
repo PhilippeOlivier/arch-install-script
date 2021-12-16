@@ -147,10 +147,12 @@ format_boot_partition() {
 #   General status
 ###############################################################################
 encrypt_format_root_partition() {
-	echo "Enter the LUKS passphrase: "
-    stty -echo
-    read LUKS_PASSPHRASE
-    stty echo
+	if [[ -z "${LUKS_PASSPHRASE}" ]]; then
+		echo "Enter the LUKS passphrase: "
+		stty -echo
+		read LUKS_PASSPHRASE
+		stty echo
+	fi
 
 	echo "Encrypting and formatting root partition ${ROOT_PARTITION}... "
 	echo "1-luksFormat"
