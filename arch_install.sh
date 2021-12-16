@@ -157,6 +157,7 @@ encrypt_format_root_partition() {
 	# note: try with and without the "-" at the end of the two following lines
 	echo "1-luksFormat"
 	echo "${LUKS_PASSPHRASE}" | cryptsetup luksFormat --type luks2 "${ROOT_PARTITION}" -d -
+	echo "${LUKS_PASSPHRASE}"
 	# echo "2-luks open"
 	# sleep 5
 	# echo "${LUKS_PASSPHRASE}" | cryptsetup open --type luks2 "${ROOT_PARTITION}" "${LUKS_MAPPER}" -d -
