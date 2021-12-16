@@ -12,7 +12,7 @@
 
 DRIVE="/dev/sda" # TODO: CHANGE TO /dev/nm...
 LUKS_MAPPING="cryptroot"
-LUKS_PASSPHRASE=""
+LUKS_PASSPHRASE="asdf"
 
 # TEMP:
 wipefs -a /dev/sda1 /dev/sda2 /dev/sda
@@ -147,22 +147,25 @@ format_boot_partition() {
 #   General status
 ###############################################################################
 encrypt_format_root_partition() {
-	echo "Enter the LUKS passphrase: "
-    stty -echo
-    read LUKS_PASSPHRASE
-    stty echo
+	# echo "Enter the LUKS passphrase: "
+    # stty -echo
+    # read LUKS_PASSPHRASE
+    # stty echo
 
 	echo "Encrypting and formatting root partition ${ROOT_PARTITION}... "
 	# NOTE: changed echo -en to just echo
 	# note: try with and without the "-" at the end of the two following lines
-	echo "1-ASDFASDFASDF"
+	echo "1-luksFormat"
 	echo "${LUKS_PASSPHRASE}" | cryptsetup luksFormat "${ROOT_PARTITION}" -d -
-	echo "2-ASDFASDFASDF"
+	echo "2-luksOpen"
 	sleep 5
 	echo "${LUKS_PASSPHRASE}" | cryptsetup luksOpen "${ROOT_PARTITION}" "${LUKS_MAPPER}" -d -
 	sleep 5
-	echo "3-ASDFASDFASDF"
-	mkfs.btrfs "/dev/mapper/${LUKS_MAPPER}"
+	#TODO: only do luksformat automatically, then try to open manually
+	# TODO: try to set passphrase manually in the script, and see if things change
+	# TODO: if passphrase is empty ask for one, if there is a passphrase then use it without prompting the user
+	# echo "3-mkfs btrfs"
+	# mkfs.btrfs "/dev/mapper/${LUKS_MAPPER}"
 }
 
 
