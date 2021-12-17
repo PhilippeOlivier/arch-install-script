@@ -1,6 +1,4 @@
-#!/usr/bin/env -S bash -e
-
-# TODO: i used to have: #!/bin/bash, now I have ^
+#!/bin/bash
 
 
 # Make sure to follow the official installation guide in parallel to this one, in case some things
@@ -118,7 +116,7 @@ partition_drive() {
 ################################################################################
 # Encrypts the primary partition.
 # Globals:
-#   LUKS_MAPPER
+#   LUKS_MAPPING
 #   LUKS_PASSPHRASE
 #   PRIMARY_PARTITION
 # Arguments:
@@ -136,42 +134,33 @@ encrypt_primary_partition() {
 	fi
 
 	echo "Encrypting primary partition ${PRIMARY_PARTITION}... "
-	echo "1-luksFormat"
 	echo -n "${LUKS_PASSPHRASE}" | cryptsetup luksFormat --type luks2 "${PRIMARY_PARTITION}" -d -
-	echo "2-luks open"
 	echo -n "${LUKS_PASSPHRASE}" | cryptsetup open --type luks2 "${PRIMARY_PARTITION}" "${LUKS_MAPPING}" -d -
-	# device-mapper: create ioctl on CRYPT-LUKS2-[uuid_of_the_partition]- failed: Invalid argument
-	# sleep 5
-	#TODO: only do luksformat automatically, then try to open manually
-	# TODO: try to set passphrase manually in the script, and see if things change
-	# TODO: if passphrase is empty ask for one, if there is a passphrase then use it without prompting the user
-	# echo "3-mkfs btrfs"
-	# mkfs.btrfs "/dev/mapper/${LUKS_MAPPER}"
 }
 
 
 
 ################################################################################
-# Formats the partition.
+# Formats the partitions.
 # Globals:
 #   BOOT_PARTITION
-#   PRIMARY_PARTITION
+#   LUKS_MAPPING
 # Arguments:
 #   None
 # Outputs:
 #   General status
 ###############################################################################
-format_boot_partition() {
-	echo "Formatting boot partition ${BOOT_PARTITION}... "
+format_partitions() {
+	echo "Formatting partitions... "
 	mkfs.vfat -F 32 "${BOOT_PARTITION}"
-		# TODO: format boot and primary should happen together, after LUKS stuff has been done
+	mkfs.btrfs "/dev/mapper/${LUKS_MAPPING}"
 }
 
 
 ################################################################################
 # Creates Btrfs subvolumes.
 # Globals:
-#   LUKS_MAPPER
+#   LUKS_MAPPING
 # Arguments:
 #   None
 # Outputs:
@@ -179,7 +168,7 @@ format_boot_partition() {
 ###############################################################################
 create_btrfs_subvolumes() {
 	echo -n "Creating Btrfs subvolumes... "
-	mount "/dev/mapper/${LUKS_MAPPER}" "/mnt"
+	mount "/dev/mapper/${LUKS_MAPPING}" "/mnt"
 	btrfs subvolume create "/mnt/@"
 	btrfs subvolume create "/mnt/@home"
 	umount "/mnt"
@@ -191,7 +180,7 @@ create_btrfs_subvolumes() {
 # Installs base packages.
 # Globals:
 #   BOOT_PARTITION
-#   LUKS_MAPPER
+#   LUKS_MAPPING
 # Arguments:
 #   None
 # Outputs:
@@ -202,9 +191,9 @@ install_base_packages() {
 	# TODO: Look at the following options and make sure that this is what I want.
 	mount_options="noatime,nodiratime,compress=zstd:1,space_cache,ssd"
 	echo -n "Creating Btrfs subvolumes... "
-	mount -o "${mount_options},subvol=@" "/dev/mapper/${LUKS_MAPPER}" "/mnt"
+	mount -o "${mount_options},subvol=@" "/dev/mapper/${LUKS_MAPPING}" "/mnt"
 	mkdir -p /mnt/{boot,home}
-	mount -o "${mount_options},subvol=@home" "/dev/mapper/${LUKS_MAPPER}" "/mnt/home"
+	mount -o "${mount_options},subvol=@home" "/dev/mapper/${LUKS_MAPPING}" "/mnt/home"
 	mount "${BOOT_PARTITION}" "/mnt/boot"
 	pacstrap /mnt base base-devel btrfs-progs intel-ucode linux linux-firmware linux-lts vim
 	genfstab -U /mnt >> /mnt/etc/fstab
@@ -218,9 +207,12 @@ boot_mode
 # set_system_clock
 partition_drive
 encrypt_primary_partition
+format_partitions
+create_btrfs_subvolumes
+install_base_packages
 
 #lsblk -lpoNAME | grep -P "/dev/nvme0n1" | sort -r
 
-#format_boot_partition
-# create_btrfs_subvolumes
-# install_base_packages
+#
+# 
+# 
