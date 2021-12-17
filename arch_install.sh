@@ -1,4 +1,6 @@
-#!/bin/bash
+#!/usr/bin/env -S bash -e
+
+# TODO: i used to have: #!/bin/bash, now I have ^
 
 
 # Make sure to follow the official installation guide in parallel to this one, in case some things
@@ -23,8 +25,10 @@ LUKS_PASSPHRASE="asdf"
 ###############################################################################
 wipe_everything() {
 	echo -n "Wiping everything on ${DRIVE}... "
-	wipefs -af "${DRIVE}"
+	wipefs -af /dev/sda1 /dev/sda2 /dev/sda
     sgdisk -Zo "${DRIVE}"
+	# wipefs -af "${DRIVE}"
+    # sgdisk -Zo "${DRIVE}"
 }
 
 
@@ -82,9 +86,11 @@ set_system_clock() {
 
 
 ################################################################################
-# Partitions the drive.
+# Partitions the drive and identifies the partitions.
 # Globals:
+#   BOOT_PARTITION
 #   DRIVE
+#   PRIMARY_PARTITION
 # Arguments:
 #   None
 # Outputs:
@@ -100,23 +106,7 @@ partition_drive() {
 		   mkpart PRIMARY 513MiB 100%
 	# Inform the OS of the changes.
 	partprobe "${DRIVE}"
-	echo "OK."
-}
-
-
-
-################################################################################
-# Identifies drive partitions.
-# Globals:
-#   BOOT_PARTITION
-#   PRIMARY_PARTITION
-# Arguments:
-#   None
-# Outputs:
-#   General status
-###############################################################################
-identify_partitions() {
-	echo -n "Identifying partitions on drive ${DRIVE}... "
+	# Identify partitions.
 	BOOT_PARTITION="/dev/disk/by-partlabel/ESP"
 	PRIMARY_PARTITION="/dev/disk/by-partlabel/PRIMARY"
 	echo "OK."
@@ -149,7 +139,7 @@ encrypt_primary_partition() {
 	echo "1-luksFormat"
 	echo -n "${LUKS_PASSPHRASE}" | cryptsetup luksFormat --type luks2 "${PRIMARY_PARTITION}" -d -
 	echo "2-luks open"
-	echo -n "$LUKS_PASSPHRASE" | cryptsetup open --type luks2 "$PRIMARY_PARTITION" "$LUKS_MAPPER" -d -
+	echo -n "${LUKS_PASSPHRASE}" | cryptsetup open --type luks2 "${PRIMARY_PARTITION}" "${LUKS_MAPPER}" -d -
 	# device-mapper: create ioctl on CRYPT-LUKS2-[uuid_of_the_partition]- failed: Invalid argument
 	# sleep 5
 	#TODO: only do luksformat automatically, then try to open manually
@@ -225,11 +215,11 @@ install_base_packages() {
 wipe_everything
 internet_connectivity
 boot_mode
-set_system_clock
+# set_system_clock
 partition_drive
-identify_partitions
 encrypt_primary_partition
 
+#lsblk -lpoNAME | grep -P "/dev/nvme0n1" | sort -r
 
 #format_boot_partition
 # create_btrfs_subvolumes
