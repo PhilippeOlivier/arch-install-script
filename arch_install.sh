@@ -11,6 +11,7 @@ DRIVE="/dev/sda" # TODO: CHANGE TO /dev/nm...
 LUKS_MAPPING="cryptroot"
 LUKS_PASSPHRASE="asdf"
 MARKER="=====> "
+HOSTNAME="pholi"
 
 
 ################################################################################
@@ -62,23 +63,6 @@ boot_mode() {
 		echo "Error."
 		exit
 	fi
-}
-
-
-################################################################################
-# Updates system clock and synchs time.
-# Arguments:
-#   None
-# Outputs:
-#   General status
-###############################################################################
-set_system_clock() {
-	echo "${MARKER}Updating system clock and synching time... "
-	systemctl enable systemd-timesyncd.service
-    systemctl start systemd-timesyncd.service
-	timedatectl set-ntp true
-	# Wait until those actions are complete before continuing.
-	sleep 10
 }
 
 
@@ -181,20 +165,15 @@ create_btrfs_subvolumes() {
 	# mount -o "${mount_options},subvol=@home" "/dev/mapper/${LUKS_MAPPING}" "/mnt/home"
 	# mount "${BOOT_PARTITION}" "/mnt/boot"
 
-	echo "{$MARKER}ONE"
 	mount -o ssd,noatime,compress-force=zstd:3,discard=async,subvol=@ "/dev/mapper/${LUKS_MAPPING}" "/mnt"
-	echo "{$MARKER}TWO"
 	mkdir -p /mnt/{boot,home}
-	echo "{$MARKER}THREE"
 	mount -o ssd,noatime,compress-force=zstd:3,discard=async,subvol=@home "/dev/mapper/${LUKS_MAPPING}" "/mnt/home"
-	echo "{$MARKER}FOUR"
 	mount "${BOOT_PARTITION}" "/mnt/boot"
-	echo "{$MARKER}FIVE"
 }
 
 
 ################################################################################
-# Installs base packages.
+# Installs base packages. Linux-LTS is installed as a backup kernel.
 # Globals:
 #   BOOT_PARTITION
 #   LUKS_MAPPING
@@ -210,6 +189,29 @@ install_base_packages() {
 }
 
 
+################################################################################
+# Performs some basic configurations.
+# Arguments:
+#   None
+# Outputs:
+#   General status
+###############################################################################
+basic_configuration() {
+	echo "${MARKER}Updating system clock and synching time... "
+	systemctl enable systemd-timesyncd.service
+    systemctl start systemd-timesyncd.service
+	timedatectl set-ntp true
+
+	arch-chroot "/mnt"
+	
+	echo "${MARKER}Setting time zone..."
+	ln -sf /usr/share/zoneinfo/Canada/Eastern /etc/localtime
+	hwclock --systohc
+
+	echo "${MARKER}Setting locale..."
+}
+
+
 wipe_everything
 internet_connectivity
 boot_mode
@@ -218,4 +220,5 @@ partition_drive
 encrypt_primary_partition
 format_partitions
 create_btrfs_subvolumes
-#install_base_packages
+install_base_packages
+basic_configuration
