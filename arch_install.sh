@@ -171,16 +171,17 @@ create_btrfs_subvolumes() {
 	mount "/dev/mapper/${LUKS_MAPPING}" "/mnt"
 	btrfs subvolume create "/mnt/@"
 	btrfs subvolume create "/mnt/@home"
+	echo "DOne creating subvolumes"
 	umount "/mnt"
 
-	# Mounting Btrfs subvolumes...
-	local mount_options
-	# TODO: Look at the following options and make sure that this is what I want.
-	mount_options="noatime,nodiratime,compress=zstd:1,space_cache,ssd"
-	mount -o "${mount_options},subvol=@" "/dev/mapper/${LUKS_MAPPING}" "/mnt"
-	mkdir -p /mnt/{boot,home}
-	mount -o "${mount_options},subvol=@home" "/dev/mapper/${LUKS_MAPPING}" "/mnt/home"
-	mount "${BOOT_PARTITION}" "/mnt/boot"
+	# # Mounting Btrfs subvolumes...
+	# local mount_options
+	# # TODO: Look at the following options and make sure that this is what I want.
+	# mount_options="noatime,nodiratime,compress=zstd:1,space_cache,ssd"
+	# mount -o "${mount_options},subvol=@" "/dev/mapper/${LUKS_MAPPING}" "/mnt"
+	# mkdir -p /mnt/{boot,home}
+	# mount -o "${mount_options},subvol=@home" "/dev/mapper/${LUKS_MAPPING}" "/mnt/home"
+	# mount "${BOOT_PARTITION}" "/mnt/boot"
 	
 	echo "OK."
 }
