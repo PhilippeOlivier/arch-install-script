@@ -158,7 +158,7 @@ format_partitions() {
 
 
 ################################################################################
-# Creates Btrfs subvolumes.
+# Creates Btrfs subvolumes and mounts them.
 # Globals:
 #   LUKS_MAPPING
 # Arguments:
@@ -167,11 +167,21 @@ format_partitions() {
 #   General status
 ###############################################################################
 create_btrfs_subvolumes() {
-	echo -n "Creating Btrfs subvolumes... "
+	echo "Creating Btrfs subvolumes... "
 	mount "/dev/mapper/${LUKS_MAPPING}" "/mnt"
 	btrfs subvolume create "/mnt/@"
 	btrfs subvolume create "/mnt/@home"
 	umount "/mnt"
+
+	# Mounting Btrfs subvolumes...
+	local mount_options
+	# TODO: Look at the following options and make sure that this is what I want.
+	mount_options="noatime,nodiratime,compress=zstd:1,space_cache,ssd"
+	mount -o "${mount_options},subvol=@" "/dev/mapper/${LUKS_MAPPING}" "/mnt"
+	mkdir -p /mnt/{boot,home}
+	mount -o "${mount_options},subvol=@home" "/dev/mapper/${LUKS_MAPPING}" "/mnt/home"
+	mount "${BOOT_PARTITION}" "/mnt/boot"
+	
 	echo "OK."
 }
 
@@ -187,17 +197,8 @@ create_btrfs_subvolumes() {
 #   General status
 ###############################################################################
 install_base_packages() {
-	local mount_options
-	# TODO: Look at the following options and make sure that this is what I want.
-	mount_options="noatime,nodiratime,compress=zstd:1,space_cache,ssd"
-	echo -n "Creating Btrfs subvolumes... "
-	mount -o "${mount_options},subvol=@" "/dev/mapper/${LUKS_MAPPING}" "/mnt"
-	mkdir -p /mnt/{boot,home}
-	mount -o "${mount_options},subvol=@home" "/dev/mapper/${LUKS_MAPPING}" "/mnt/home"
-	mount "${BOOT_PARTITION}" "/mnt/boot"
 	pacstrap /mnt base base-devel btrfs-progs intel-ucode linux linux-firmware linux-lts vim
 	genfstab -U /mnt >> /mnt/etc/fstab
-	echo "OK."
 }
 
 
@@ -209,7 +210,7 @@ partition_drive
 encrypt_primary_partition
 format_partitions
 create_btrfs_subvolumes
-install_base_packages
+#install_base_packages
 
 #lsblk -lpoNAME | grep -P "/dev/nvme0n1" | sort -r
 
