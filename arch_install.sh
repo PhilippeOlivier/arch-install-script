@@ -6,44 +6,25 @@
 
 # use shorturl.at to shorten this url, then: curl -L THEURL > install.sh, and then sh install.sh
 
-# to wipe everything beforehand, example:
-# wipefs -a /dev/sda1 /dev/sda2 /dev/sda
-
 
 DRIVE="/dev/sda" # TODO: CHANGE TO /dev/nm...
 LUKS_MAPPING="cryptroot"
 LUKS_PASSPHRASE="asdf"
 
-# TEMP:
-wipefs -a /dev/sda1 /dev/sda2 /dev/sda
-
 
 ################################################################################
-# Identifies drive partitions.
+# Wipes everything from the drive.
 # Globals:
-#   BOOT_PARTITION
 #   DRIVE
-#   ROOT_PARTITION
 # Arguments:
 #   None
 # Outputs:
 #   General status
 ###############################################################################
-identify_partitions() {
-	echo -n "Identifying partitions on drive ${DRIVE}... "
-	if [[ "$DRIVE" =~ ^\/dev\/sd ]]; then
-		BOOT_PARTITION="${DRIVE}1"
-		ROOT_PARTITION="${DRIVE}2"
-	elif [[ "$DRIVE" =~ ^\/dev\/nvm ]]; then
-		BOOT_PARTITION="${DRIVE}p1"
-		ROOT_PARTITION="${DRIVE}p2"
-	else
-		echo "Error.."
-		exit
-	fi
-	echo "OK."
-	echo -e "\tBoot partition: ${BOOT_PARTITION}"
-	echo -e "\tRoot partition: ${ROOT_PARTITION}"
+wipe_everything() {
+	echo -n "Wiping everything on ${DRIVE}... "
+	wipefs -af "${DRIVE}"
+    sgdisk -Zo "${DRIVE}"
 }
 
 
@@ -110,21 +91,81 @@ set_system_clock() {
 #   General status
 ###############################################################################
 partition_drive() {
+	# TODO: set 1 esp on was previously set 1 boot on. Does it still work now?
 	echo -n "Partitioning drive ${DRIVE}... "
 	parted -s "${DRIVE}" \
 		   mklabel gpt \
 		   mkpart ESP fat32 1MiB 513MiB \
-		   set 1 boot on \
-		   mkpart primary btrfs 513MiB 100%
+		   set 1 esp on \
+		   mkpart PRIMARY btrfs 513MiB 100%
+	# Inform the OS of the changes.
 	partprobe "${DRIVE}"
 	echo "OK."
 }
 
 
+
 ################################################################################
-# Formats the boot partition.
+# Identifies drive partitions.
 # Globals:
 #   BOOT_PARTITION
+#   PRIMARY_PARTITION
+# Arguments:
+#   None
+# Outputs:
+#   General status
+###############################################################################
+identify_partitions() {
+	echo -n "Identifying partitions on drive ${DRIVE}... "
+	BOOT_PARTITION="/dev/disk/by-partlabel/ESP"
+	PRIMARY_PARTITION="/dev/disk/by-partlabel/PRIMARY"
+	echo "OK."
+	echo -e "\tBoot partition: ${BOOT_PARTITION}"
+	echo -e "\tPrimary partition: ${PRIMARY_PARTITION}"
+}
+
+
+################################################################################
+# Encrypts the primary partition.
+# Globals:
+#   LUKS_MAPPER
+#   LUKS_PASSPHRASE
+#   PRIMARY_PARTITION
+# Arguments:
+#   None
+# Outputs:
+#   General status
+###############################################################################
+encrypt_primary_partition() {
+	# If no password is provided, prompt the user for one.
+	if [[ -z "${LUKS_PASSPHRASE}" ]]; then
+		echo "Enter the LUKS passphrase: "
+		stty -echo
+		read LUKS_PASSPHRASE
+		stty echo
+	fi
+
+	echo "Encrypting primary partition ${PRIMARY_PARTITION}... "
+	echo "1-luksFormat"
+	echo -n "${LUKS_PASSPHRASE}" | cryptsetup luksFormat --type luks2 "${PRIMARY_PARTITION}" -d -
+	echo "2-luks open"
+	echo -n "${LUKS_PASSPHRASE}" | cryptsetup open -q --type luks2 "${PRIMARY_PARTITION}" "${LUKS_MAPPER}" -d -
+	# device-mapper: create ioctl on CRYPT-LUKS2-[uuid_of_the_partition]- failed: Invalid argument
+	# sleep 5
+	#TODO: only do luksformat automatically, then try to open manually
+	# TODO: try to set passphrase manually in the script, and see if things change
+	# TODO: if passphrase is empty ask for one, if there is a passphrase then use it without prompting the user
+	# echo "3-mkfs btrfs"
+	# mkfs.btrfs "/dev/mapper/${LUKS_MAPPER}"
+}
+
+
+
+################################################################################
+# Formats the partition.
+# Globals:
+#   BOOT_PARTITION
+#   PRIMARY_PARTITION
 # Arguments:
 #   None
 # Outputs:
@@ -133,40 +174,7 @@ partition_drive() {
 format_boot_partition() {
 	echo "Formatting boot partition ${BOOT_PARTITION}... "
 	mkfs.vfat -F 32 "${BOOT_PARTITION}"
-}
-
-
-################################################################################
-# Encrypts and formats the root partition.
-# Globals:
-#   LUKS_MAPPER
-#   LUKS_PASSPHRASE
-#   ROOT_PARTITION
-# Arguments:
-#   None
-# Outputs:
-#   General status
-###############################################################################
-encrypt_format_root_partition() {
-	if [[ -z "${LUKS_PASSPHRASE}" ]]; then
-		echo "Enter the LUKS passphrase: "
-		stty -echo
-		read LUKS_PASSPHRASE
-		stty echo
-	fi
-
-	echo "Encrypting and formatting root partition ${ROOT_PARTITION}... "
-	echo "1-luksFormat"
-	echo -n "${LUKS_PASSPHRASE}" | cryptsetup luksFormat --type luks2 "${ROOT_PARTITION}" -d -
-	echo "2-luks open"
-	echo -n "${LUKS_PASSPHRASE}" | cryptsetup open -q --type luks2 "${ROOT_PARTITION}" "${LUKS_MAPPER}" -d -
-	# device-mapper: create ioctl on CRYPT-LUKS2-[uuid_of_the_partition]- failed: Invalid argument
-	# sleep 5
-	#TODO: only do luksformat automatically, then try to open manually
-	# TODO: try to set passphrase manually in the script, and see if things change
-	# TODO: if passphrase is empty ask for one, if there is a passphrase then use it without prompting the user
-	# echo "3-mkfs btrfs"
-	# mkfs.btrfs "/dev/mapper/${LUKS_MAPPER}"
+		# TODO: format boot and primary should happen together, after LUKS stuff has been done
 }
 
 
@@ -214,13 +222,15 @@ install_base_packages() {
 }
 
 
-identify_partitions
+wipe_everything
 internet_connectivity
 boot_mode
-# set_system_clock
+set_system_clock
 partition_drive
-format_boot_partition
-encrypt_format_root_partition
+indentify_partitions
+encrypt_primary_partition
 
+
+#format_boot_partition
 # create_btrfs_subvolumes
 # install_base_packages
