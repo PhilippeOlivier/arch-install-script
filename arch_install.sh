@@ -149,7 +149,7 @@ encrypt_primary_partition() {
 	echo "1-luksFormat"
 	echo -n "${LUKS_PASSPHRASE}" | cryptsetup luksFormat --type luks2 "${PRIMARY_PARTITION}" -d -
 	echo "2-luks open"
-	echo -n "${LUKS_PASSPHRASE}" | cryptsetup open -q --type luks2 "${PRIMARY_PARTITION}" "${LUKS_MAPPER}" -d -
+	echo -n "${LUKS_PASSPHRASE}" | cryptsetup open --type luks2 "${PRIMARY_PARTITION}" "${LUKS_MAPPER}" -d -
 	# device-mapper: create ioctl on CRYPT-LUKS2-[uuid_of_the_partition]- failed: Invalid argument
 	# sleep 5
 	#TODO: only do luksformat automatically, then try to open manually
