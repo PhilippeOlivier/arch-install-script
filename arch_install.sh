@@ -182,11 +182,11 @@ create_btrfs_subvolumes() {
 	# mount "${BOOT_PARTITION}" "/mnt/boot"
 
 	echo "{$MARKER}ONE"
-	mount -o noatime,nodiratime,compress=zstd:1,space_cache,ssd,subvol=@ "/dev/mapper/${LUKS_MAPPING}" "/mnt"
+	mount -o ssd,noatime,compress-force=zstd:3,discard=async,subvol=@ "/dev/mapper/${LUKS_MAPPING}" "/mnt"
 	echo "{$MARKER}TWO"
 	mkdir -p /mnt/{boot,home}
 	echo "{$MARKER}THREE"
-	mount -o noatime,nodiratime,compress=zstd:1,space_cache,ssd,subvol=@home "/dev/mapper/${LUKS_MAPPING}" "/mnt/home"
+	mount -o ssd,noatime,compress-force=zstd:3,discard=async,subvol=@home "/dev/mapper/${LUKS_MAPPING}" "/mnt/home"
 	echo "{$MARKER}FOUR"
 	mount "${BOOT_PARTITION}" "/mnt/boot"
 	echo "{$MARKER}FIVE"
