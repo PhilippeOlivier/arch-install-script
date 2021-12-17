@@ -10,6 +10,7 @@
 DRIVE="/dev/sda" # TODO: CHANGE TO /dev/nm...
 LUKS_MAPPING="cryptroot"
 LUKS_PASSPHRASE="asdf"
+MARKER="=====> "
 
 
 ################################################################################
@@ -22,7 +23,7 @@ LUKS_PASSPHRASE="asdf"
 #   General status
 ###############################################################################
 wipe_everything() {
-	echo -n "Wiping everything on ${DRIVE}... "
+	echo -n "${MARKER}Wiping everything on ${DRIVE}... "
 	wipefs -af /dev/sda1 /dev/sda2 /dev/sda
     sgdisk -Zo "${DRIVE}"
 	# wipefs -af "${DRIVE}"
@@ -38,7 +39,7 @@ wipe_everything() {
 #   General status
 ###############################################################################
 internet_connectivity() {
-	echo -n "Checking for internet connection... "
+	echo -n "${MARKER}Checking for internet connection... "
 	if ping -q -c 1 -W 1 8.8.8.8 > /dev/null; then
 		echo "OK."
 	else
@@ -56,7 +57,7 @@ internet_connectivity() {
 #   General status
 ###############################################################################
 boot_mode() {
-	echo -n "Checking for UEFI boot mode... "
+	echo -n "${MARKER}Checking for UEFI boot mode... "
 	if [[ -d "/sys/firmware/efi/efivars" ]]; then
 		echo "OK."
 	else
@@ -74,7 +75,7 @@ boot_mode() {
 #   General status
 ###############################################################################
 set_system_clock() {
-	echo "Updating system clock and synching time... "
+	echo "${MARKER}Updating system clock and synching time... "
 	systemctl enable systemd-timesyncd.service
     systemctl start systemd-timesyncd.service
 	timedatectl set-ntp true
@@ -96,7 +97,7 @@ set_system_clock() {
 ###############################################################################
 partition_drive() {
 	# TODO: set 1 esp on was previously set 1 boot on. Does it still work now?
-	echo -n "Partitioning drive ${DRIVE}... "
+	echo -n "${MARKER}Partitioning drive ${DRIVE}... "
 	parted -s "${DRIVE}" \
 		   mklabel gpt \
 		   mkpart ESP fat32 1MiB 513MiB \
@@ -127,13 +128,13 @@ partition_drive() {
 encrypt_primary_partition() {
 	# If no password is provided, prompt the user for one.
 	if [[ -z "${LUKS_PASSPHRASE}" ]]; then
-		echo "Enter the LUKS passphrase: "
+		echo "${MARKER}Enter the LUKS passphrase: "
 		stty -echo
 		read LUKS_PASSPHRASE
 		stty echo
 	fi
 
-	echo "Encrypting primary partition ${PRIMARY_PARTITION}... "
+	echo "${MARKER}Encrypting primary partition ${PRIMARY_PARTITION}... "
 	echo -n "${LUKS_PASSPHRASE}" | cryptsetup luksFormat --type luks2 "${PRIMARY_PARTITION}" -d -
 	echo -n "${LUKS_PASSPHRASE}" | cryptsetup open --type luks2 "${PRIMARY_PARTITION}" "${LUKS_MAPPING}" -d -
 }
@@ -151,7 +152,7 @@ encrypt_primary_partition() {
 #   General status
 ###############################################################################
 format_partitions() {
-	echo "Formatting partitions... "
+	echo "${MARKER}Formatting partitions... "
 	mkfs.vfat -F 32 "${BOOT_PARTITION}"
 	mkfs.btrfs "/dev/mapper/${LUKS_MAPPING}"
 }
@@ -167,23 +168,26 @@ format_partitions() {
 #   General status
 ###############################################################################
 create_btrfs_subvolumes() {
-	echo "Creating Btrfs subvolumes... "
+	echo "${MARKER}Creating Btrfs subvolumes... "
 	mount "/dev/mapper/${LUKS_MAPPING}" "/mnt"
 	btrfs subvolume create "/mnt/@"
 	btrfs subvolume create "/mnt/@home"
-	echo "DOne creating subvolumes"
 	umount "/mnt"
 
-	# # Mounting Btrfs subvolumes...
-	# local mount_options
+	echo "${MARKER}Mounting Btrfs subvolumes..."
+	local mount_options
 	# # TODO: Look at the following options and make sure that this is what I want.
 	# mount_options="noatime,nodiratime,compress=zstd:1,space_cache,ssd"
 	# mount -o "${mount_options},subvol=@" "/dev/mapper/${LUKS_MAPPING}" "/mnt"
 	# mkdir -p /mnt/{boot,home}
 	# mount -o "${mount_options},subvol=@home" "/dev/mapper/${LUKS_MAPPING}" "/mnt/home"
 	# mount "${BOOT_PARTITION}" "/mnt/boot"
-	
-	echo "OK."
+
+	mount_options=""
+	mount -o noatime,nodiratime,compress=zstd:1,space_cache,ssd,subvol=@ "/dev/mapper/${LUKS_MAPPING}" "/mnt"
+	mkdir -p /mnt/{boot,home}
+	mount -o noatime,nodiratime,compress=zstd:1,space_cache,ssd,subvol=@home "/dev/mapper/${LUKS_MAPPING}" "/mnt/home"
+	mount "${BOOT_PARTITION}" "/mnt/boot"
 }
 
 
@@ -198,6 +202,7 @@ create_btrfs_subvolumes() {
 #   General status
 ###############################################################################
 install_base_packages() {
+	echo "${MARKER}Installing base packages..."
 	pacstrap /mnt base base-devel btrfs-progs intel-ucode linux linux-firmware linux-lts vim
 	genfstab -U /mnt >> /mnt/etc/fstab
 }
