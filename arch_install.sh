@@ -23,11 +23,9 @@ MARKER="=====> "
 #   General status
 ###############################################################################
 wipe_everything() {
-	echo -n "${MARKER}Wiping everything on ${DRIVE}... "
-	wipefs -af /dev/sda1 /dev/sda2 /dev/sda
+	echo "${MARKER}Wiping everything on ${DRIVE}... "
+	wipefs -af $(lsblk -lpoNAME | grep -P "${DRIVE}" | sort -r)
     sgdisk -Zo "${DRIVE}"
-	# wipefs -af "${DRIVE}"
-    # sgdisk -Zo "${DRIVE}"
 }
 
 
@@ -183,11 +181,15 @@ create_btrfs_subvolumes() {
 	# mount -o "${mount_options},subvol=@home" "/dev/mapper/${LUKS_MAPPING}" "/mnt/home"
 	# mount "${BOOT_PARTITION}" "/mnt/boot"
 
-	mount_options=""
+	echo "{$MARKER}ONE"
 	mount -o noatime,nodiratime,compress=zstd:1,space_cache,ssd,subvol=@ "/dev/mapper/${LUKS_MAPPING}" "/mnt"
+	echo "{$MARKER}TWO"
 	mkdir -p /mnt/{boot,home}
+	echo "{$MARKER}THREE"
 	mount -o noatime,nodiratime,compress=zstd:1,space_cache,ssd,subvol=@home "/dev/mapper/${LUKS_MAPPING}" "/mnt/home"
+	echo "{$MARKER}FOUR"
 	mount "${BOOT_PARTITION}" "/mnt/boot"
+	echo "{$MARKER}FIVE"
 }
 
 
@@ -217,9 +219,3 @@ encrypt_primary_partition
 format_partitions
 create_btrfs_subvolumes
 #install_base_packages
-
-#lsblk -lpoNAME | grep -P "/dev/nvme0n1" | sort -r
-
-#
-# 
-# 
