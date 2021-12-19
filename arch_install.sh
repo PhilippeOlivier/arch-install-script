@@ -7,11 +7,20 @@
 # use shorturl.at to shorten this url, then: curl -L THEURL > install.sh, and then sh install.sh
 
 
-DRIVE="/dev/sda" # TODO: CHANGE TO /dev/nm...
+DRIVE="/dev/sda"
+
 LUKS_MAPPING="cryptroot"
 LUKS_PASSPHRASE="asdf"
+
+ROOT_PASSWORD="asdf"
+USER_NAME="pholi"
+USER_PASSWORD="asdf"
+
+HOSTNAME="pholi-arch"
+LOCALE="en_CA.UTF-8 UTF-8"
+TIME_ZONE="Canada/Eastern"
+
 MARKER="=====> "
-HOSTNAME="pholi"
 
 
 ################################################################################
@@ -151,10 +160,10 @@ format_partitions() {
 ###############################################################################
 create_btrfs_subvolumes() {
 	echo "${MARKER}Creating Btrfs subvolumes... "
-	mount "/dev/mapper/${LUKS_MAPPING}" "/mnt"
-	btrfs subvolume create "/mnt/@"
-	btrfs subvolume create "/mnt/@home"
-	umount "/mnt"
+	mount "/dev/mapper/${LUKS_MAPPING}" /mnt
+	btrfs subvolume create /mnt/@
+	btrfs subvolume create /mnt/@home
+	umount /mnt
 
 	echo "${MARKER}Mounting Btrfs subvolumes..."
 	local mount_options
@@ -165,10 +174,10 @@ create_btrfs_subvolumes() {
 	# mount -o "${mount_options},subvol=@home" "/dev/mapper/${LUKS_MAPPING}" "/mnt/home"
 	# mount "${BOOT_PARTITION}" "/mnt/boot"
 
-	mount -o ssd,noatime,compress-force=zstd:3,discard=async,subvol=@ "/dev/mapper/${LUKS_MAPPING}" "/mnt"
+	mount -o ssd,noatime,compress-force=zstd:3,discard=async,subvol=@ "/dev/mapper/${LUKS_MAPPING}" /mnt
 	mkdir -p /mnt/{boot,home}
-	mount -o ssd,noatime,compress-force=zstd:3,discard=async,subvol=@home "/dev/mapper/${LUKS_MAPPING}" "/mnt/home"
-	mount "${BOOT_PARTITION}" "/mnt/boot"
+	mount -o ssd,noatime,compress-force=zstd:3,discard=async,subvol=@home "/dev/mapper/${LUKS_MAPPING}" /mnt/home
+	mount "${BOOT_PARTITION}" /mnt/boot
 }
 
 
@@ -202,20 +211,73 @@ basic_configuration() {
     systemctl start systemd-timesyncd.service
 	timedatectl set-ntp true
 
-	arch-chroot "/mnt"
+	echo "${MARKER}Chroot... "
+	arch-chroot /mnt
 	
 	echo "${MARKER}Setting time zone..."
-	ln -sf /usr/share/zoneinfo/Canada/Eastern /etc/localtime
+	ln -sf "/usr/share/zoneinfo/${TIME_ZONE}" /etc/localtime
 	hwclock --systohc
 
 	echo "${MARKER}Setting locale..."
+	# Uncomment relevant locale in /etc/locale.gen.
+	sed -i "/^${LOCALE}/ c${LOCALE}" /etc/locale.gen
+	locale-gen
+	echo "LANG=en_CA.UTF-8" > /etc/locale.conf
+
+	echo "${MARKER}Setting hostname..."
+	echo "${HOSTNAME}" > /etc/hostname
+	cat > /mnt/etc/hosts <<EOF
+127.0.0.1 localhost
+::1 localhost
+127.0.1.1 ${HOSTNAME}.localdomain ${HOSTNAME}
+EOF
+
+	echo "${MARKER}Setting user and passwords..."
+	echo "root:${ROOT_PASSWORD}" | chpasswd
+	useradd -m -G wheel -s /bin/bash "${USER_NAME}"
+	echo "${USER_NAME} ALL=(ALL) ALL" >> /etc/sudoers
+	echo "${USER_NAME}:${USER_PASSWORD}" | chpasswd
+
+	echo "${MARKER}Setting mkinitcpio options..."
+	sed -i "/^MODULES=(/ cMODULES=(btrfs)" /etc/mkinitcpio.conf
+	# TODO: Which hooks do I really need?
+	sed -i "/^HOOKS=(/ cHOOKS=(base udev autodetect keyboard keymap consolefont modconf block encrypt filesystems fsck)" /etc/mkinitcpio.conf
 }
+
+
+################################################################################
+# Sets up the bootloader.
+# Arguments:
+#   None
+# Outputs:
+#   General status
+###############################################################################
+bootloader() {
+	echo "${MARKER}Setting up the bootloader... "
+	
+	mkinitcpio -P
+}
+
+
+################################################################################
+# Rebooting.
+# Arguments:
+#   None
+# Outputs:
+#   General status
+###############################################################################
+reboot() {
+	echo "${MARKER}Preparing for reboot... "
+	exit
+	# TODO: unmount stuff here??
+	shutdown now
+}
+
 
 
 wipe_everything
 internet_connectivity
 boot_mode
-# set_system_clock
 partition_drive
 encrypt_primary_partition
 format_partitions
