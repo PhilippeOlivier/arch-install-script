@@ -254,8 +254,27 @@ EOF
 ###############################################################################
 bootloader() {
 	echo "${MARKER}Setting up the bootloader... "
-	
+	# the two lines are TEMP:
+	BOOT_PARTITION="/dev/disk/by-partlabel/ESP"
+	PRIMARY_PARTITION="/dev/disk/by-partlabel/PRIMARY"
 	mkinitcpio -P
+	bootctl --path=/boot install
+	local primary_partition_uuid
+	primary_partition_uuid=$(blkid -s UUID -o value ${PRIMARY_PARTITION})
+	cat > /boot/loader/entries/arch.conf <<EOF
+title Arch Linux
+linux /vmlinuz-linux
+initrd /intel-ucode.img
+initrd /initramfs-linux.img
+options rd.luks.name=${primary_partition_uuid}=${LUKS_MAPPING} root=/dev/mapper/${LUKS_MAPPING}
+rootflags=subvol=@ rd.luks.options=${primary_partition_uuid}=discard rw quiet
+lsm=lockdown,yama,apparmor,bpf
+EOF
+	cat > /boot/loader/loader.conf <<EOF
+timeout 10
+default arch.conf
+editor no
+EOF
 }
 
 
@@ -269,18 +288,20 @@ bootloader() {
 reboot() {
 	echo "${MARKER}Preparing for reboot... "
 	exit
-	# TODO: unmount stuff here??
+	umount -a
 	shutdown now
 }
 
 
 
-wipe_everything
-internet_connectivity
-boot_mode
-partition_drive
-encrypt_primary_partition
-format_partitions
-create_btrfs_subvolumes
-install_base_packages
-basic_configuration
+# wipe_everything
+# internet_connectivity
+# boot_mode
+# partition_drive
+# encrypt_primary_partition
+# format_partitions
+# create_btrfs_subvolumes
+# install_base_packages
+# basic_configuration
+bootloader
+reboot
