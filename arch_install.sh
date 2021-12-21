@@ -19,6 +19,8 @@ USER_PASSWORD="asdf"
 HOSTNAME="pholi-arch"
 LOCALE="en_CA.UTF-8 UTF-8"
 TIME_ZONE="Canada/Eastern"
+MODULES="btrfs"
+HOOKS="base systemd autodetect modconf block keyboard keymap sd-encrypt filesystems fsck"
 
 MARKER="=====> "
 
@@ -152,6 +154,7 @@ format_partitions() {
 ################################################################################
 # Creates Btrfs subvolumes and mounts them.
 # Globals:
+#   BOOT_PARTITION
 #   LUKS_MAPPING
 # Arguments:
 #   None
@@ -183,9 +186,6 @@ create_btrfs_subvolumes() {
 
 ################################################################################
 # Installs base packages. Linux-LTS is installed as a backup kernel.
-# Globals:
-#   BOOT_PARTITION
-#   LUKS_MAPPING
 # Arguments:
 #   None
 # Outputs:
@@ -200,6 +200,15 @@ install_base_packages() {
 
 ################################################################################
 # Performs some basic configurations.
+# Globals:
+#   LOCALE
+#   HOOKS
+#   HOSTNAME
+#   MODULES
+#   ROOT_PASSWORD
+#   TIME_ZONE
+#   USER_NAME
+#   USER_PASSWORD
 # Arguments:
 #   None
 # Outputs:
@@ -226,7 +235,7 @@ basic_configuration() {
 
 	echo "${MARKER}Setting hostname..."
 	echo "${HOSTNAME}" > /etc/hostname
-	cat > /mnt/etc/hosts <<EOF
+	cat > /etc/hosts <<EOF
 127.0.0.1 localhost
 ::1 localhost
 127.0.1.1 ${HOSTNAME}.localdomain ${HOSTNAME}
@@ -239,13 +248,16 @@ EOF
 	echo "${USER_NAME}:${USER_PASSWORD}" | chpasswd
 
 	echo "${MARKER}Setting mkinitcpio options..."
-	sed -i "/^MODULES=(/cMODULES=(btrfs)" /etc/mkinitcpio.conf
-	sed -i "/^HOOKS=(/cHOOKS=(base systemd autodetect modconf block keyboard sd-vconsole sd-encrypt filesystems fsck)" /etc/mkinitcpio.conf
+	sed -i "/^MODULES=(/cMODULES=(${MODULES})" /etc/mkinitcpio.conf
+	sed -i "/^HOOKS=(/cHOOKS=(${HOOKS})" /etc/mkinitcpio.conf
 }
 
 
 ################################################################################
 # Sets up the bootloader.
+# Globals:
+#   LUKS_MAPPING
+#   PRIMARY_PARTITION
 # Arguments:
 #   None
 # Outputs:
@@ -293,14 +305,14 @@ reboot() {
 
 
 
-# wipe_everything
-# internet_connectivity
-# boot_mode
-# partition_drive
-# encrypt_primary_partition
-# format_partitions
-# create_btrfs_subvolumes
-# install_base_packages
+wipe_everything
+internet_connectivity
+boot_mode
+partition_drive
+encrypt_primary_partition
+format_partitions
+create_btrfs_subvolumes
+install_base_packages
 basic_configuration
 bootloader
 # reboot
