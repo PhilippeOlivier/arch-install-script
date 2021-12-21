@@ -215,7 +215,8 @@ install_base_packages() {
 #   General status
 ###############################################################################
 basic_configuration() {
-	cat > /mnt/basic_configuration.sh <<EOFAC
+	#cat > /mnt/basic_configuration.sh <<EOFAC
+	arch-chroot /bin/bash <<EOFAC
 	echo "${MARKER}Updating system clock and synching time... "
 	systemctl enable systemd-timesyncd.service
     systemctl start systemd-timesyncd.service
@@ -252,8 +253,8 @@ EOF
 	exit
 EOFAC
 
-	echo "${MARKER}Chroot... "
-	arch-chroot /mnt ./basic_configuration.sh
+	# echo "${MARKER}Chroot... "
+	# arch-chroot /mnt ./basic_configuration.sh
 }
 
 
@@ -268,7 +269,7 @@ EOFAC
 #   General status
 ###############################################################################
 bootloader() {
-	cat > /mnt/bootloader.sh <<EOFAC
+	arch-chroot /bin/bash <<EOFAC
 	echo "${MARKER}Setting up the bootloader... "
 	# the two lines are TEMP:
 	BOOT_PARTITION="/dev/disk/by-partlabel/ESP"
@@ -295,8 +296,8 @@ EOF
 exit
 EOFAC
 
-	echo "${MARKER}Chroot... "
-	arch-chroot /mnt ./bootloader.sh
+	# echo "${MARKER}Chroot... "
+	# arch-chroot /mnt ./bootloader.sh
 }
 
 
