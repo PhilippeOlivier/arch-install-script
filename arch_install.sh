@@ -220,7 +220,7 @@ basic_configuration() {
 
 	echo "${MARKER}Setting locale..."
 	# Uncomment relevant locale in /etc/locale.gen.
-	sed -i "/^${LOCALE}/ c${LOCALE}" /etc/locale.gen
+	sed -i "/^#${LOCALE}/c\${LOCALE}" /etc/locale.gen
 	locale-gen
 	echo "LANG=en_CA.UTF-8" > /etc/locale.conf
 
@@ -239,9 +239,8 @@ EOF
 	echo "${USER_NAME}:${USER_PASSWORD}" | chpasswd
 
 	echo "${MARKER}Setting mkinitcpio options..."
-	sed -i "/^MODULES=(/ cMODULES=(btrfs)" /etc/mkinitcpio.conf
-	# TODO: Which hooks do I really need?
-	sed -i "/^HOOKS=(/ cHOOKS=(base udev autodetect keyboard keymap consolefont modconf block encrypt filesystems fsck)" /etc/mkinitcpio.conf
+	sed -i "/^MODULES=(/c\MODULES=(btrfs)" /etc/mkinitcpio.conf
+	sed -i "/^HOOKS=(/c\HOOKS=(base systemd autodetect modconf block keyboard sd-vconsole sd-encrypt filesystems fsck)" /etc/mkinitcpio.conf
 }
 
 
