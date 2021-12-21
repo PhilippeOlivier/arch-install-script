@@ -215,13 +215,11 @@ install_base_packages() {
 #   General status
 ###############################################################################
 basic_configuration() {
+	cat > /mnt/basic_configuration.sh <<EOFAC
 	echo "${MARKER}Updating system clock and synching time... "
 	systemctl enable systemd-timesyncd.service
     systemctl start systemd-timesyncd.service
 	timedatectl set-ntp true
-
-	echo "${MARKER}Chroot... "
-	arch-chroot /mnt
 	
 	echo "${MARKER}Setting time zone..."
 	ln -sf "/usr/share/zoneinfo/${TIME_ZONE}" /etc/localtime
@@ -250,6 +248,12 @@ EOF
 	echo "${MARKER}Setting mkinitcpio options..."
 	sed -i "/^MODULES=(/cMODULES=(${MODULES})" /etc/mkinitcpio.conf
 	sed -i "/^HOOKS=(/cHOOKS=(${HOOKS})" /etc/mkinitcpio.conf
+
+	exit
+EOFAC
+
+	echo "${MARKER}Chroot... "
+	arch-chroot /mnt ./basic_configuration.sh
 }
 
 
@@ -264,6 +268,7 @@ EOF
 #   General status
 ###############################################################################
 bootloader() {
+	cat > /mnt/bootloader.sh <<EOFAC
 	echo "${MARKER}Setting up the bootloader... "
 	# the two lines are TEMP:
 	BOOT_PARTITION="/dev/disk/by-partlabel/ESP"
@@ -286,6 +291,12 @@ timeout 10
 default arch.conf
 editor no
 EOF
+
+exit
+EOFAC
+
+	echo "${MARKER}Chroot... "
+	arch-chroot /mnt ./bootloader.sh
 }
 
 
@@ -298,7 +309,7 @@ EOF
 ###############################################################################
 reboot() {
 	echo "${MARKER}Preparing for reboot... "
-	exit
+	# exit
 	umount -a
 	shutdown now
 }
