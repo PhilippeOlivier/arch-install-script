@@ -4,7 +4,7 @@
 # Make sure to follow the official installation guide in parallel to this one, in case some things
 # changed in the official guide. If so, update the current guide.
 
-# use shorturl.at to shorten this url, then: curl -L THEURL > install.sh, and then sh install.sh
+# use tinyurl.com to shorten this url, then: curl -L tinyurl.com/pholi > install.sh, and then sh install.sh
 
 
 DRIVE="/dev/sda"
@@ -293,14 +293,14 @@ reboot() {
 
 
 
-# wipe_everything
-# internet_connectivity
-# boot_mode
-# partition_drive
-# encrypt_primary_partition
-# format_partitions
-# create_btrfs_subvolumes
-# install_base_packages
-# basic_configuration
+wipe_everything
+internet_connectivity
+boot_mode
+partition_drive
+encrypt_primary_partition
+format_partitions
+create_btrfs_subvolumes
+install_base_packages
+basic_configuration
 bootloader
-reboot
+# reboot
