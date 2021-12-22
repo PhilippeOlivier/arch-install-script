@@ -277,14 +277,14 @@ bootloader() {
 	mkinitcpio -P
 	bootctl --path=/boot install
 	#local primary_partition_uuid
-	#primary_partition_uuid=$(blkid -s UUID -o value ${PRIMARY_PARTITION})
-	cat > /boot/loader/entries/arch.conf <<EOF
+	primary_partition_uuid=$(blkid -s UUID -o value ${PRIMARY_PARTITION})
+	cat > /boot/loader/entries/arch.conf <<'EOF'
 title Arch Linux
 linux /vmlinuz-linux
 initrd /intel-ucode.img
 initrd /initramfs-linux.img
-options rd.luks.name=$(blkid -s UUID -o value ${PRIMARY_PARTITION})=${LUKS_MAPPING} root=/dev/mapper/${LUKS_MAPPING}
-rootflags=subvol=@ rd.luks.options=$(blkid -s UUID -o value ${PRIMARY_PARTITION})=discard rw quiet
+options rd.luks.name=${primary_partition_uuid}=${LUKS_MAPPING} root=/dev/mapper/${LUKS_MAPPING}
+rootflags=subvol=@ rd.luks.options=${primary_partition_uuid}=discard rw quiet
 lsm=lockdown,yama,apparmor,bpf
 EOF
 	cat > /boot/loader/loader.conf <<EOF
