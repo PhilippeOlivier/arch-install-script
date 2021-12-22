@@ -275,7 +275,7 @@ bootloader() {
 	PRIMARY_PARTITION="/dev/disk/by-partlabel/PRIMARY"
 	PRIMARY_PARTITION_UUID="$(blkid -s UUID -o value ${PRIMARY_PARTITION})"
 	echo "================prim1: ${PRIMARY_PARTITION_UUID}"
-	arch-chroot /mnt /bin/bash <<'EOFAC'
+	arch-chroot /mnt /bin/bash <<EOFAC
 	echo "${MARKER}Setting up the bootloader... "
 	echo "================prim2: ${PRIMARY_PARTITION_UUID}"
 	#mkinitcpio -P
