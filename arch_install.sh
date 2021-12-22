@@ -20,7 +20,8 @@ HOSTNAME="pholi-arch"
 LOCALE="en_CA.UTF-8 UTF-8"
 TIME_ZONE="Canada/Eastern"
 MODULES="btrfs"
-HOOKS="base systemd autodetect modconf block keyboard keymap sd-encrypt filesystems fsck"
+# i removed fsck from hooks, and replaced sd-encrypt with encrypt
+HOOKS="base systemd autodetect modconf block keyboard keymap encrypt filesystems"
 
 MARKER="=====> "
 
@@ -270,6 +271,11 @@ EOFAC
 #   General status
 ###############################################################################
 bootloader() {
+	# I used to have these 3 lines below "initrd /initramfs-linux.img"
+	# options rd.luks.name=${PRIMARY_PARTITION_UUID}=${LUKS_MAPPING} root=/dev/mapper/${LUKS_MAPPING}
+	# rootflags=subvol=@ rd.luks.options=${PRIMARY_PARTITION_UUID}=discard rw quiet
+	# lsm=lockdown,yama,apparmor,bpf
+	
 	# the 2 lines are TEMP:
 	BOOT_PARTITION="/dev/disk/by-partlabel/ESP"
 	PRIMARY_PARTITION="/dev/disk/by-partlabel/PRIMARY"
@@ -285,9 +291,7 @@ title Arch Linux
 linux /vmlinuz-linux
 initrd /intel-ucode.img
 initrd /initramfs-linux.img
-options rd.luks.name=${PRIMARY_PARTITION_UUID}=${LUKS_MAPPING} root=/dev/mapper/${LUKS_MAPPING}
-rootflags=subvol=@ rd.luks.options=${PRIMARY_PARTITION_UUID}=discard rw quiet
-lsm=lockdown,yama,apparmor,bpf
+options cryptdevice=UUID=${PRIMARY_PARTITION_UUID}:cryptroot:allow-discards root=/dev/mapper/cryptroot rootflags=subvol=@ rw
 EOF
 	cat > /boot/loader/loader.conf <<EOF
 timeout 10
