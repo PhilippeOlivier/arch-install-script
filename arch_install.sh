@@ -21,7 +21,7 @@ LOCALE="en_CA.UTF-8 UTF-8"
 TIME_ZONE="Canada/Eastern"
 MODULES="btrfs"
 # i removed fsck from hooks, and replaced sd-encrypt with encrypt
-HOOKS="base systemd autodetect modconf block keyboard keymap encrypt filesystems"
+HOOKS="base systemd autodetect btrfs modconf block keyboard keymap encrypt filesystems"
 
 MARKER="=====> "
 
@@ -279,13 +279,15 @@ bootloader() {
 	# the 2 lines are TEMP:
 	BOOT_PARTITION="/dev/disk/by-partlabel/ESP"
 	PRIMARY_PARTITION="/dev/disk/by-partlabel/PRIMARY"
+	# the following line is not temp
 	PRIMARY_PARTITION_UUID="$(blkid -s UUID -o value ${PRIMARY_PARTITION})"
 	echo "================prim1: ${PRIMARY_PARTITION_UUID}"
+	# TODO: grub and grub-btrfs, and luks1?
 	arch-chroot /mnt /bin/bash <<EOFAC
 	echo "${MARKER}Setting up the bootloader... "
 	echo "================prim2: ${PRIMARY_PARTITION_UUID}"
-	#mkinitcpio -P
-	#bootctl --path=/boot install
+	mkinitcpio -P
+	bootctl --path=/boot install
 	cat > /boot/loader/entries/arch.conf <<EOF
 title Arch Linux
 linux /vmlinuz-linux
