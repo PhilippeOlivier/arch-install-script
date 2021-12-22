@@ -273,11 +273,11 @@ bootloader() {
 	# the 2 lines are TEMP:
 	BOOT_PARTITION="/dev/disk/by-partlabel/ESP"
 	PRIMARY_PARTITION="/dev/disk/by-partlabel/PRIMARY"
-	PRIMARY_PARTITION_UUID=$(blkid -s UUID -o value ${PRIMARY_PARTITION})
+	PRIMARY_PARTITION_UUID="$(blkid -s UUID -o value ${PRIMARY_PARTITION})"
 	arch-chroot /mnt /bin/bash <<'EOFAC'
 	echo "${MARKER}Setting up the bootloader... "
-	mkinitcpio -P
-	bootctl --path=/boot install
+	#mkinitcpio -P
+	#bootctl --path=/boot install
 	cat > /boot/loader/entries/arch.conf <<EOF
 title Arch Linux
 linux /vmlinuz-linux
