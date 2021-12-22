@@ -269,11 +269,12 @@ EOFAC
 #   General status
 ###############################################################################
 bootloader() {
-	arch-chroot /mnt /bin/bash <<EOFAC
+	arch-chroot /mnt /bin/bash <<'EOFAC'
 	echo "${MARKER}Setting up the bootloader... "
-	# the two lines are TEMP:
+	# the 3 lines are TEMP:
 	BOOT_PARTITION="/dev/disk/by-partlabel/ESP"
 	PRIMARY_PARTITION="/dev/disk/by-partlabel/PRIMARY"
+	LUKS_MAPPING=/dev/mapper/cryptroot
 	# mkinitcpio -P
 	# bootctl --path=/boot install
 	#local primary_partition_uuid
