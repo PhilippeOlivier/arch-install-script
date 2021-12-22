@@ -318,14 +318,14 @@ reboot() {
 
 
 
-# wipe_everything
-# internet_connectivity
-# boot_mode
-# partition_drive
-# encrypt_primary_partition
-# format_partitions
-# create_btrfs_subvolumes
-# install_base_packages
-# basic_configuration
+wipe_everything
+internet_connectivity
+boot_mode
+partition_drive
+encrypt_primary_partition
+format_partitions
+create_btrfs_subvolumes
+install_base_packages
+basic_configuration
 bootloader
 # reboot
