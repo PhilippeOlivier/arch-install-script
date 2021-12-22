@@ -271,16 +271,15 @@ EOFAC
 bootloader() {
 	arch-chroot /mnt /bin/bash <<'EOFAC'
 	echo "${MARKER}Setting up the bootloader... "
-	# the 3 lines are TEMP:
+	# the 2 lines are TEMP:
 	BOOT_PARTITION="/dev/disk/by-partlabel/ESP"
 	PRIMARY_PARTITION="/dev/disk/by-partlabel/PRIMARY"
-	LUKS_MAPPING=/dev/mapper/cryptroot
-	# mkinitcpio -P
-	# bootctl --path=/boot install
+	mkinitcpio -P
+	bootctl --path=/boot install
 	#local primary_partition_uuid
 	primary_partition_uuid=$(blkid -s UUID -o value ${PRIMARY_PARTITION})
 	echo "============= prim part: ${primary_partition_uuid}"
-	cat > /boot/loader/entries/arch.conf <<'EOF'
+	cat > /boot/loader/entries/arch.conf <<EOF
 title Arch Linux
 linux /vmlinuz-linux
 initrd /intel-ucode.img
