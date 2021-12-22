@@ -272,8 +272,8 @@ bootloader() {
 	arch-chroot /mnt /bin/bash <<'EOFAC'
 	echo "${MARKER}Setting up the bootloader... "
 	# the 2 lines are TEMP:
-	BOOT_PARTITION="/dev/disk/by-partlabel/ESP"
-	PRIMARY_PARTITION="/dev/disk/by-partlabel/PRIMARY"
+	# BOOT_PARTITION="/dev/disk/by-partlabel/ESP"
+	# PRIMARY_PARTITION="/dev/disk/by-partlabel/PRIMARY"
 	mkinitcpio -P
 	bootctl --path=/boot install
 	#local primary_partition_uuid
