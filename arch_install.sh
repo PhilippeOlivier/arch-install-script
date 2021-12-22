@@ -216,7 +216,7 @@ install_base_packages() {
 ###############################################################################
 basic_configuration() {
 	#cat > /mnt/basic_configuration.sh <<EOFAC
-	arch-chroot /bin/bash <<EOFAC
+	arch-chroot /mnt /bin/bash <<EOFAC
 	echo "${MARKER}Updating system clock and synching time... "
 	systemctl enable systemd-timesyncd.service
     systemctl start systemd-timesyncd.service
@@ -269,22 +269,22 @@ EOFAC
 #   General status
 ###############################################################################
 bootloader() {
-	arch-chroot /bin/bash <<EOFAC
+	arch-chroot /mnt /bin/bash <<EOFAC
 	echo "${MARKER}Setting up the bootloader... "
 	# the two lines are TEMP:
 	BOOT_PARTITION="/dev/disk/by-partlabel/ESP"
 	PRIMARY_PARTITION="/dev/disk/by-partlabel/PRIMARY"
 	mkinitcpio -P
 	bootctl --path=/boot install
-	local primary_partition_uuid
-	primary_partition_uuid=$(blkid -s UUID -o value ${PRIMARY_PARTITION})
+	#local primary_partition_uuid
+	#primary_partition_uuid=$(blkid -s UUID -o value ${PRIMARY_PARTITION})
 	cat > /boot/loader/entries/arch.conf <<EOF
 title Arch Linux
 linux /vmlinuz-linux
 initrd /intel-ucode.img
 initrd /initramfs-linux.img
-options rd.luks.name=${primary_partition_uuid}=${LUKS_MAPPING} root=/dev/mapper/${LUKS_MAPPING}
-rootflags=subvol=@ rd.luks.options=${primary_partition_uuid}=discard rw quiet
+options rd.luks.name=$(blkid -s UUID -o value ${PRIMARY_PARTITION})=${LUKS_MAPPING} root=/dev/mapper/${LUKS_MAPPING}
+rootflags=subvol=@ rd.luks.options=$(blkid -s UUID -o value ${PRIMARY_PARTITION})=discard rw quiet
 lsm=lockdown,yama,apparmor,bpf
 EOF
 	cat > /boot/loader/loader.conf <<EOF
@@ -317,14 +317,14 @@ reboot() {
 
 
 
-wipe_everything
-internet_connectivity
-boot_mode
-partition_drive
-encrypt_primary_partition
-format_partitions
-create_btrfs_subvolumes
-install_base_packages
-basic_configuration
+# wipe_everything
+# internet_connectivity
+# boot_mode
+# partition_drive
+# encrypt_primary_partition
+# format_partitions
+# create_btrfs_subvolumes
+# install_base_packages
+# basic_configuration
 bootloader
 # reboot
