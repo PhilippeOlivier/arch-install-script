@@ -1,27 +1,71 @@
 #!/bin/bash
 
 
-# Make sure to follow the official installation guide in parallel to this one, in case some things
-# changed in the official guide. If so, update the current guide.
-
-# use tinyurl.com to shorten this url, then: curl -L tinyurl.com/pholi > install.sh, and then sh install.sh
+# Author: Philippe Olivier
+#
+#
+# Introduction
+# ============
+#
+# The following is a basic Arch Linux installation script that provides the following:
+# - Btrfs filesystem
+# - LUKS2 encryption
+# - GRUB bootloader that handles bootable snapshots
+#
+# As always, make sure to validate this script against the current official installation guide that
+# can be found on the Arch Wiki, to ensure that the installation proceeds reliably.
+#
+# Some parts of this script are somewhat inspired by https://github.com/classy-giraffe/easy-arch
+#
+#
+# Usage
+# =====
+#
+# $ bash <(curl -sL URL_OF_THIS_SCRIPT)
+#
+# This script is mostly automated, but still requires some user input. Please fill some data in the
+# global variables below.
+#
+#
+# Partitions layout
+# =================
+#
+# +---+---------+---------+------------+------------+
+# | # | Label   | Size    | Mountpoint | Filesystem |
+# +---+---------+---------+------------+------------+
+# | 1 | ESP     | 512 MiB | /boot      | FAT32      |
+# | 2 | PRIMARY | Rest    | /          | Btrfs      |
+# +---+---------+---------+------------+------------+
+#
+#
+# Btrfs subvolumes layout
+# =======================
+#
+# The following layout is used, as suggested for Snapper here:
+# https://wiki.archlinux.org/title/Snapper#Suggested_filesystem_layout
+#
+# +------------+-------------+
+# | Name       | Mountpoint  |
+# +------------+-------------+
+# | @          | /           |
+# | @home      | /home       |
+# | @snapshots | /.snapshots |
+# | @var_log   | /var/log    |
+# +------------+-------------+
 
 
 DRIVE="/dev/sda"
-
-LUKS_MAPPING="cryptroot"
 LUKS_PASSPHRASE="asdf"
-
 ROOT_PASSWORD="asdf"
 USER_NAME="pholi"
 USER_PASSWORD="asdf"
 
+LUKS_MAPPING="cryptroot"
 HOSTNAME="pholi-arch"
 LOCALE="en_CA.UTF-8 UTF-8"
 TIME_ZONE="Canada/Eastern"
-MODULES="btrfs"
-# i removed fsck from hooks, and replaced sd-encrypt with encrypt
-HOOKS="base systemd autodetect btrfs modconf block keyboard keymap encrypt filesystems"
+# MODULES="btrfs"
+# HOOKS="base systemd autodetect keyboard keymap modconf block sd-encrypt filesystems"
 
 MARKER="=====> "
 
@@ -90,14 +134,13 @@ boot_mode() {
 #   General status
 ###############################################################################
 partition_drive() {
-	# TODO: set 1 esp on was previously set 1 boot on. Does it still work now?
 	echo -n "${MARKER}Partitioning drive ${DRIVE}... "
 	parted -s "${DRIVE}" \
 		   mklabel gpt \
 		   mkpart ESP fat32 1MiB 513MiB \
 		   set 1 esp on \
 		   mkpart PRIMARY 513MiB 100%
-	# Inform the OS of the changes.
+	# Inform the kernel of the changes.
 	partprobe "${DRIVE}"
 	# Identify partitions.
 	BOOT_PARTITION="/dev/disk/by-partlabel/ESP"
@@ -120,12 +163,9 @@ partition_drive() {
 #   General status
 ###############################################################################
 encrypt_primary_partition() {
-	# If no password is provided, prompt the user for one.
+	# If no LUKS password is provided, prompt the user for one.
 	if [[ -z "${LUKS_PASSPHRASE}" ]]; then
-		echo "${MARKER}Enter the LUKS passphrase: "
-		stty -echo
-		read LUKS_PASSPHRASE
-		stty echo
+		read -r -s -p "${MARKER}Enter the LUKS passphrase: " LUKS_PASSPHRASE
 	fi
 
 	echo "${MARKER}Encrypting primary partition ${PRIMARY_PARTITION}... "
@@ -165,8 +205,9 @@ format_partitions() {
 create_btrfs_subvolumes() {
 	echo "${MARKER}Creating Btrfs subvolumes... "
 	mount "/dev/mapper/${LUKS_MAPPING}" /mnt
-	btrfs subvolume create /mnt/@
-	btrfs subvolume create /mnt/@home
+	for volume in @ @home @snapshots @var_log; do
+		btrfs subvolume create /mnt/$volume
+	done
 	umount /mnt
 
 	echo "${MARKER}Mounting Btrfs subvolumes..."
@@ -179,8 +220,12 @@ create_btrfs_subvolumes() {
 	# mount "${BOOT_PARTITION}" "/mnt/boot"
 
 	mount -o ssd,noatime,compress-force=zstd:3,discard=async,subvol=@ "/dev/mapper/${LUKS_MAPPING}" /mnt
-	mkdir -p /mnt/{boot,home}
+	mkdir -p /mnt/{boot,home,.snapshots,/var/log}
 	mount -o ssd,noatime,compress-force=zstd:3,discard=async,subvol=@home "/dev/mapper/${LUKS_MAPPING}" /mnt/home
+	mount -o ssd,noatime,compress-force=zstd:3,discard=async,subvol=@snapshots "/dev/mapper/${LUKS_MAPPING}" /mnt/.snapshots
+	mount -o ssd,noatime,compress-force=zstd:3,discard=async,subvol=@var_log "/dev/mapper/${LUKS_MAPPING}" /mnt/var/log
+	# Note sure I need the chattr command...?
+	chattr +C /mnt/var/log
 	mount "${BOOT_PARTITION}" /mnt/boot
 }
 
@@ -194,7 +239,8 @@ create_btrfs_subvolumes() {
 ###############################################################################
 install_base_packages() {
 	echo "${MARKER}Installing base packages..."
-	pacstrap /mnt base base-devel btrfs-progs intel-ucode linux linux-firmware linux-lts vim
+	# todo: remove vim
+	pacstrap /mnt base base-devel btrfs-progs efibootmgr grub grub-btrfs intel-ucode linux linux-firmware linux-lts snap-pac snapper vim
 	genfstab -U /mnt >> /mnt/etc/fstab
 }
 
@@ -216,6 +262,15 @@ install_base_packages() {
 #   General status
 ###############################################################################
 basic_configuration() {
+	# If no root password is provided, prompt the user for one.
+	if [[ -z "${ROOT_PASSWORD}" ]]; then
+		read -r -s -p "${MARKER}Enter the root_password: " ROOT_PASSWORD
+	fi
+	# If no user password is provided, prompt the user for one.
+	if [[ -z "${USER_PASSWORD}" ]]; then
+		read -r -s -p "${MARKER}Enter the user password: " USER_PASSWORD
+	fi
+	
 	#cat > /mnt/basic_configuration.sh <<EOFAC
 	arch-chroot /mnt /bin/bash <<EOFAC
 	echo "${MARKER}Updating system clock and synching time... "
@@ -246,10 +301,10 @@ EOF
 	useradd -m -G wheel -s /bin/bash "${USER_NAME}"
 	echo "${USER_NAME} ALL=(ALL) ALL" >> /etc/sudoers
 	echo "${USER_NAME}:${USER_PASSWORD}" | chpasswd
-
 	echo "${MARKER}Setting mkinitcpio options..."
-	sed -i "/^MODULES=(/cMODULES=(${MODULES})" /etc/mkinitcpio.conf
-	sed -i "/^HOOKS=(/cHOOKS=(${HOOKS})" /etc/mkinitcpio.conf
+	sed -i "/^MODULES=(/cMODULES=(btrfs)" /etc/mkinitcpio.conf
+	sed -i "/^HOOKS=(/cHOOKS=(base systemd autodetect keyboard keymap modconf block sd-encrypt filesystems)" /etc/mkinitcpio.conf
+	sed -i "/^COMPRESSION=(/cCOMPRESSION=(zstd)" /etc/mkinitcpio.conf
 
 	exit
 EOFAC
@@ -286,21 +341,28 @@ bootloader() {
 	arch-chroot /mnt /bin/bash <<EOFAC
 	echo "${MARKER}Setting up the bootloader... "
 	echo "================prim2: ${PRIMARY_PARTITION_UUID}"
-	mkinitcpio -P
-	bootctl --path=/boot install
-	cat > /boot/loader/entries/arch.conf <<EOF
-title Arch Linux
-linux /vmlinuz-linux
-initrd /intel-ucode.img
-initrd /initramfs-linux.img
-options cryptdevice=UUID=${PRIMARY_PARTITION_UUID}:cryptroot:allow-discards root=/dev/mapper/cryptroot rootflags=subvol=@ rw
-EOF
-	cat > /boot/loader/loader.conf <<EOF
-timeout 10
-default arch.conf
-editor no
-EOF
 
+sed -i "s,quiet,quiet rd.luks.name=${PRIMARY_PARTITION_UUID}=cryptroot root=/dev/mapper/${LUKS_MAPPER},g" /etc/default/grub
+
+    # Snapper configuration
+    echo "Configuring Snapper."
+    umount /.snapshots
+    rm -r /.snapshots
+    snapper --no-dbus -c root create-config /
+    btrfs subvolume delete /.snapshots &>/dev/null
+    mkdir /.snapshots
+    mount -a
+    chmod 750 /.snapshots
+
+# Installing GRUB.
+    echo "Installing GRUB on /boot."
+    grub-install --target=x86_64-efi --efi-directory=/boot/ --bootloader-id=GRUB &>/dev/null
+    # Creating grub config file.
+    echo "Creating GRUB config file."
+    grub-mkconfig -o /boot/grub/grub.cfg &>/dev/null
+
+
+	mkinitcpio -P
 exit
 EOFAC
 
