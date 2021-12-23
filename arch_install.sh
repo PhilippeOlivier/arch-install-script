@@ -69,7 +69,6 @@ TIME_ZONE="Canada/Eastern"
 
 MARKER="=====> "
 
-
 ################################################################################
 # Wipes everything from the drive.
 # Globals:
