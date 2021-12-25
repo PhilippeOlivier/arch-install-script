@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env -S bash -e
 
 
 # Author: Philippe Olivier
@@ -15,7 +15,11 @@
 # As always, make sure to validate this script against the current official installation guide that
 # can be found on the Arch Wiki, to ensure that the installation proceeds reliably.
 #
-# Some parts of this script are somewhat inspired by https://github.com/classy-giraffe/easy-arch
+# This script is heavily based off the work of Tommaso Chiti. His script can be found here:
+# https://github.com/classy-giraffe/easy-arch
+#
+# This script is custom tailored to my specific needs. If you want a more general script, you should
+# definitely use Tommaso's script.
 #
 #
 # Usage
@@ -54,296 +58,199 @@
 # +------------+-------------+
 
 
-DRIVE="/dev/sda"
-LUKS_PASSPHRASE="asdf"
+# Passwords (ask them to the user).
 ROOT_PASSWORD="asdf"
-USER_NAME="pholi"
 USER_PASSWORD="asdf"
 
+
+BOOT_LABEL="ESP"
+ROOT_LABEL="ROOT"
+BOOT_PARTITION="/dev/disk/by-partlabel/${BOOT_LABEL}"
+ROOT_PARTITION="/dev/disk/by-partlabel/${ROOT_LABEL}"
 LUKS_MAPPING="cryptroot"
+CRYPTROOT="/dev/mapper/${LUKS_MAPPING}"
+
+# all this is preset
+USERNAME="pholi"
 HOSTNAME="pholi-arch"
-LOCALE="en_CA.UTF-8 UTF-8"
-TIME_ZONE="Canada/Eastern"
-# MODULES="btrfs"
-# HOOKS="base systemd autodetect keyboard keymap modconf block sd-encrypt filesystems"
 
-MARKER="=====> "
 
-################################################################################
-# Wipes everything from the drive.
-# Globals:
-#   DRIVE
-# Arguments:
-#   None
-# Outputs:
-#   General status
-###############################################################################
-wipe_everything() {
-	echo "${MARKER}Wiping everything on ${DRIVE}... "
-	wipefs -af $(lsblk -lpoNAME | grep -P "${DRIVE}" | sort -r)
-    sgdisk -Zo "${DRIVE}"
+# Clearing the TTY.
+clear
+
+# Pretty print.
+print () {
+    echo -e "\e[1m\e[93m[ \e[92m•\e[93m ] \e[4m$1\e[0m"
+}
+
+# Setting up a password for the LUKS container.
+luks_password () {
+	local password
+    read -r -s -p "Enter a password for the LUKS container: " password
+    if [[ -z "${password}" ]]; then
+        print "You need to enter a password for the LUKS container."
+        luks_password
+    fi
+    echo -n "${password}" | cryptsetup luksFormat --type luks2 "${ROOT_PARTITION}" -d -
+    echo -n "${password}" | cryptsetup open --type luks2 "${ROOT_PARTITION}" "${LUKS_MAPPING}" -d -    
 }
 
 
-################################################################################
-# Checks for internet connectivity.
-# Arguments:
-#   None
-# Outputs:
-#   General status
-###############################################################################
-internet_connectivity() {
-	echo -n "${MARKER}Checking for internet connection... "
-	if ping -q -c 1 -W 1 8.8.8.8 > /dev/null; then
-		echo "OK."
-	else
-		echo "Error."
-		exit
-	fi
-}
+print "The script to install Arch Linux begins."
 
+# Making sure that there is internet connectivity.
+print "Checking for internet connection."
+if ping -q -c 1 -W 1 8.8.8.8 &>/dev/null; then
+	print "Connected to the internet."
+else
+	print "Error: No internet connection. Quitting."
+	exit
+fi
 
-################################################################################
-# Checks for UEFI boot mode.
-# Arguments:
-#   None
-# Outputs:
-#   General status
-###############################################################################
-boot_mode() {
-	echo -n "${MARKER}Checking for UEFI boot mode... "
-	if [[ -d "/sys/firmware/efi/efivars" ]]; then
-		echo "OK."
-	else
-		echo "Error."
-		exit
-	fi
-}
+# Checking for UEFI boot mode.
+print "Checking for UEFI boot mode."
+if [[ -d "/sys/firmware/efi/efivars" ]]; then
+	print "UEFI boot mode detected."
+else
+	print "Error: UEFI boot mode not detected. Quitting."
+	exit
+fi
 
+# Selecting the target for the installation.
+PS3="Select the device where Arch Linux is going to be installed: "
+select ENTRY in $(lsblk -dpnoNAME|grep -P "/dev/sd|nvme|vd");
+do
+    DEVICE=$ENTRY
+    print "Installing Arch Linux on ${DEVICE}."
+    break
+done
 
-################################################################################
-# Partitions the drive and identifies the partitions.
-# Globals:
-#   BOOT_PARTITION
-#   DRIVE
-#   PRIMARY_PARTITION
-# Arguments:
-#   None
-# Outputs:
-#   General status
-###############################################################################
-partition_drive() {
-	echo -n "${MARKER}Partitioning drive ${DRIVE}... "
-	parted -s "${DRIVE}" \
-		   mklabel gpt \
-		   mkpart ESP fat32 1MiB 513MiB \
-		   set 1 esp on \
-		   mkpart PRIMARY 513MiB 100%
-	# Inform the kernel of the changes.
-	partprobe "${DRIVE}"
-	# Identify partitions.
-	BOOT_PARTITION="/dev/disk/by-partlabel/ESP"
-	PRIMARY_PARTITION="/dev/disk/by-partlabel/PRIMARY"
-	echo "OK."
-	echo -e "\tBoot partition: ${BOOT_PARTITION}"
-	echo -e "\tPrimary partition: ${PRIMARY_PARTITION}"
-}
+# Deleting old partition scheme.
+read -r -p "Delete the current partition table on ${DEVICE}? [y/N] " response
+response=${response,,}
+if [[ "${response}" =~ ^(yes|y)$ ]]; then
+    print "Wiping ${DEVICE}."
+	wipefs -af $(lsblk -lpoNAME | grep -P "${DEVICE}" | sort -r) &>/dev/null
+    sgdisk -Zo "${DEVICE}" &>/dev/null
+else
+    print "Quitting."
+    exit
+fi
 
+# Creating a new partition scheme.
+print "Creating the partitions on ${DEVICE}."
+parted -s "${DEVICE}" \
+    mklabel gpt \
+    mkpart ESP fat32 1MiB 513MiB \
+    set 1 esp on \
+    mkpart ROOT 513MiB 100% \
 
-################################################################################
-# Encrypts the primary partition.
-# Globals:
-#   LUKS_MAPPING
-#   LUKS_PASSPHRASE
-#   PRIMARY_PARTITION
-# Arguments:
-#   None
-# Outputs:
-#   General status
-###############################################################################
-encrypt_primary_partition() {
-	# If no LUKS password is provided, prompt the user for one.
-	if [[ -z "${LUKS_PASSPHRASE}" ]]; then
-		read -r -s -p "${MARKER}Enter the LUKS passphrase: " LUKS_PASSPHRASE
-	fi
+BOOT_PARTITION="/dev/disk/by-partlabel/ESP"
+ROOT_PARTITION="/dev/disk/by-partlabel/ROOT"
 
-	echo "${MARKER}Encrypting primary partition ${PRIMARY_PARTITION}... "
-	echo -n "${LUKS_PASSPHRASE}" | cryptsetup luksFormat --type luks2 "${PRIMARY_PARTITION}" -d -
-	echo -n "${LUKS_PASSPHRASE}" | cryptsetup open --type luks2 "${PRIMARY_PARTITION}" "${LUKS_MAPPING}" -d -
-}
+# Informing the Kernel of the changes.
+print "Informing the Kernel about the disk changes."
+partprobe "${DEVICE}"
 
+# Formatting the boot partition as FAT32.
+print "Formatting the boot partition as FAT32."
+mkfs.fat -F 32 $BOOT_PARTITION &>/dev/null
 
+# Creating a LUKS Container for the root partition.
+print "Creating LUKS Container for the root partition."
+luks_password
 
-################################################################################
-# Formats the partitions.
-# Globals:
-#   BOOT_PARTITION
-#   LUKS_MAPPING
-# Arguments:
-#   None
-# Outputs:
-#   General status
-###############################################################################
-format_partitions() {
-	echo "${MARKER}Formatting partitions... "
-	mkfs.vfat -F 32 "${BOOT_PARTITION}"
-	mkfs.btrfs "/dev/mapper/${LUKS_MAPPING}"
-}
+# Formatting the LUKS Container as Btrfs.
+print "Formatting the LUKS container as Btrfs."
+mkfs.btrfs ${CRYPTROOT} &>/dev/null
+mount ${CRYPTROOT} /mnt
 
+# Creating Btrfs subvolumes.
+print "Creating Btrfs subvolumes."
+for volume in @ @home @snapshots @var_log @var_pkgs
+do
+    btrfs subvolume create /mnt/$volume
+done
 
-################################################################################
-# Creates Btrfs subvolumes and mounts them.
-# Globals:
-#   BOOT_PARTITION
-#   LUKS_MAPPING
-# Arguments:
-#   None
-# Outputs:
-#   General status
-###############################################################################
-create_btrfs_subvolumes() {
-	echo "${MARKER}Creating Btrfs subvolumes... "
-	mount "/dev/mapper/${LUKS_MAPPING}" /mnt
-	for volume in @ @home @snapshots @var_log; do
-		btrfs subvolume create /mnt/$volume
-	done
-	umount /mnt
+# Mounting the newly created subvolumes.
+umount /mnt
+print "Mounting the newly created subvolumes."
+# TODO: change the mount options (noatime, nodiratime(necessary if I have noatime?), space_cache?, ssd?, different compression?, discard_async?)
+mount -o ssd,noatime,compress-force=zstd:3,discard=async,subvol=@ ${CRYPTROOT} /mnt
+mkdir -p /mnt/{home,.snapshots,/var/log,/var/cache/pacman/pkg,boot}
+mount -o ssd,noatime,compress-force=zstd:3,discard=async,subvol=@home ${CRYPTROOT} /mnt/home
+mount -o ssd,noatime,compress-force=zstd:3,discard=async,subvol=@snapshots ${CRYPTROOT} /mnt/.snapshots
+mount -o ssd,noatime,compress-force=zstd:3,discard=async,subvol=@var_log ${CRYPTROOT} /mnt/var/log
+mount -o ssd,noatime,compress-force=zstd:3,discard=async,subvol=@var_pkgs ${CRYPTROOT} /mnt/var/cache/pacman/pkg
+chattr +C /mnt/var/log
+mount $BOOT_PARTITION /mnt/boot/
 
-	echo "${MARKER}Mounting Btrfs subvolumes..."
-	local mount_options
-	# # TODO: Look at the following options and make sure that this is what I want.
-	# mount_options="noatime,nodiratime,compress=zstd:1,space_cache,ssd"
-	# mount -o "${mount_options},subvol=@" "/dev/mapper/${LUKS_MAPPING}" "/mnt"
-	# mkdir -p /mnt/{boot,home}
-	# mount -o "${mount_options},subvol=@home" "/dev/mapper/${LUKS_MAPPING}" "/mnt/home"
-	# mount "${BOOT_PARTITION}" "/mnt/boot"
+# Pacstrap (setting up a base sytem onto the new root).
+print "Installing the base system (it may take a while)."
+# TODO: remove some packages, add base-devel, etc. My own list was: base base-devel btrfs-progs efibootmgr grub grub-btrfs intel-ucode linux linux-firmware linux-lts snap-pac snapper (linux-lts not necessary anymore because of snapshots)
+pacstrap /mnt base linux intel-ucode linux-firmware linux-headers btrfs-progs grub grub-btrfs rsync efibootmgr snapper reflector base-devel snap-pac zram-generator
 
-	mount -o ssd,noatime,compress-force=zstd:3,discard=async,subvol=@ "/dev/mapper/${LUKS_MAPPING}" /mnt
-	mkdir -p /mnt/{boot,home,.snapshots,/var/log}
-	mount -o ssd,noatime,compress-force=zstd:3,discard=async,subvol=@home "/dev/mapper/${LUKS_MAPPING}" /mnt/home
-	mount -o ssd,noatime,compress-force=zstd:3,discard=async,subvol=@snapshots "/dev/mapper/${LUKS_MAPPING}" /mnt/.snapshots
-	mount -o ssd,noatime,compress-force=zstd:3,discard=async,subvol=@var_log "/dev/mapper/${LUKS_MAPPING}" /mnt/var/log
-	# Note sure I need the chattr command...?
-	chattr +C /mnt/var/log
-	mount "${BOOT_PARTITION}" /mnt/boot
-}
+# Setting up the hostname.
+echo "${HOSTNAME}" > /mnt/etc/hostname
 
+# Generating /etc/fstab.
+print "Generating a new fstab."
+genfstab -U /mnt >> /mnt/etc/fstab
 
-################################################################################
-# Installs base packages. Linux-LTS is installed as a backup kernel.
-# Arguments:
-#   None
-# Outputs:
-#   General status
-###############################################################################
-install_base_packages() {
-	echo "${MARKER}Installing base packages..."
-	# todo: remove vim
-	pacstrap /mnt base base-devel btrfs-progs efibootmgr grub grub-btrfs intel-ucode linux linux-firmware linux-lts snap-pac snapper vim
-	genfstab -U /mnt >> /mnt/etc/fstab
-}
+# Setting up the locale.
+# echo "en_CA.UTF-8 UTF-8"  > /mnt/etc/locale.gen
+sed -i "/^#en_CA.UTF-8 UTF-8/cen_CA.UTF-8 UTF-8" /mnt/etc/locale.gen
+echo "LANG=en_CA.UTF-8" > /mnt/etc/locale.conf
 
+# Setting up keyboard layout.
+echo "KEYMAP=us" > /mnt/etc/vconsole.conf
 
-################################################################################
-# Performs some basic configurations.
-# Globals:
-#   LOCALE
-#   HOOKS
-#   HOSTNAME
-#   MODULES
-#   ROOT_PASSWORD
-#   TIME_ZONE
-#   USER_NAME
-#   USER_PASSWORD
-# Arguments:
-#   None
-# Outputs:
-#   General status
-###############################################################################
-basic_configuration() {
-	# If no root password is provided, prompt the user for one.
-	if [[ -z "${ROOT_PASSWORD}" ]]; then
-		read -r -s -p "${MARKER}Enter the root_password: " ROOT_PASSWORD
-	fi
-	# If no user password is provided, prompt the user for one.
-	if [[ -z "${USER_PASSWORD}" ]]; then
-		read -r -s -p "${MARKER}Enter the user password: " USER_PASSWORD
-	fi
-	
-	#cat > /mnt/basic_configuration.sh <<EOFAC
-	arch-chroot /mnt /bin/bash <<EOFAC
-	echo "${MARKER}Updating system clock and synching time... "
+# Setting hosts file.
+print "Setting hosts file."
+cat > /mnt/etc/hosts <<EOF
+127.0.0.1   localhost
+::1         localhost
+127.0.1.1   ${HOSTNAME}.localdomain   ${HOSTNAME}
+EOF
+
+# Configuring /etc/mkinitcpio.conf.
+print "Configuring /etc/mkinitcpio.conf."
+# TODO: maybe remove compression
+sed -i "/^MODULES=(/cMODULES=(btrfs)" /etc/mkinitcpio.conf
+sed -i "/^HOOKS=(/cHOOKS=(base systemd autodetect keyboard sd-vconsole modconf block sd-encrypt filesystems)" /etc/mkinitcpio.conf
+sed -i "/^COMPRESSION=(/COMPRESSION=(zstd)" /etc/mkinitcpio.conf
+# cat > /mnt/etc/mkinitcpio.conf <<EOF
+# HOOKS=(base systemd autodetect keyboard sd-vconsole modconf block sd-encrypt filesystems)
+# COMPRESSION=(zstd)
+# EOF
+
+# Setting up LUKS2 encryption in GRUB.
+print "Setting up GRUB config."
+UUID=$(blkid -s UUID -o value $ROOT_PARTITION)
+sed -i "s,quiet,quiet rd.luks.name=${UUID}=cryptroot root=${CRYPTROOT},g" /mnt/etc/default/grub
+
+# Configuring the system.    
+arch-chroot /mnt /bin/bash -e <<EOF
+    # Setting up timezone.
+    echo "Setting up the timezone."
+    ln -sf /usr/share/zoneinfo/Canada/Eastern /etc/localtime &>/dev/null
+    
+    # Setting up clock.
+    echo "Setting up the system clock."
+    hwclock --systohc
 	systemctl enable systemd-timesyncd.service
     systemctl start systemd-timesyncd.service
 	timedatectl set-ntp true
-	
-	echo "${MARKER}Setting time zone..."
-	ln -sf "/usr/share/zoneinfo/${TIME_ZONE}" /etc/localtime
-	hwclock --systohc
 
-	echo "${MARKER}Setting locale..."
-	# Uncomment relevant locale in /etc/locale.gen.
-	sed -i "/^#${LOCALE}/c${LOCALE}" /etc/locale.gen
-	locale-gen
-	echo "LANG=en_CA.UTF-8" > /etc/locale.conf
-
-	echo "${MARKER}Setting hostname..."
-	echo "${HOSTNAME}" > /etc/hostname
-	cat > /etc/hosts <<EOF
-127.0.0.1 localhost
-::1 localhost
-127.0.1.1 ${HOSTNAME}.localdomain ${HOSTNAME}
-EOF
-
-	echo "${MARKER}Setting user and passwords..."
-	echo "root:${ROOT_PASSWORD}" | chpasswd
-	useradd -m -G wheel -s /bin/bash "${USER_NAME}"
-	echo "${USER_NAME} ALL=(ALL) ALL" >> /etc/sudoers
-	echo "${USER_NAME}:${USER_PASSWORD}" | chpasswd
-	echo "${MARKER}Setting mkinitcpio options..."
-	sed -i "/^MODULES=(/cMODULES=(btrfs)" /etc/mkinitcpio.conf
-	sed -i "/^HOOKS=(/cHOOKS=(base systemd autodetect keyboard keymap modconf block sd-encrypt filesystems)" /etc/mkinitcpio.conf
-	sed -i "/^COMPRESSION=(/cCOMPRESSION=(zstd)" /etc/mkinitcpio.conf
-
-	exit
-EOFAC
-
-	# echo "${MARKER}Chroot... "
-	# arch-chroot /mnt ./basic_configuration.sh
-}
-
-
-################################################################################
-# Sets up the bootloader.
-# Globals:
-#   LUKS_MAPPING
-#   PRIMARY_PARTITION
-#   PRIMARY_PARTITION_UUID
-# Arguments:
-#   None
-# Outputs:
-#   General status
-###############################################################################
-bootloader() {
-	# I used to have these 3 lines below "initrd /initramfs-linux.img"
-	# options rd.luks.name=${PRIMARY_PARTITION_UUID}=${LUKS_MAPPING} root=/dev/mapper/${LUKS_MAPPING}
-	# rootflags=subvol=@ rd.luks.options=${PRIMARY_PARTITION_UUID}=discard rw quiet
-	# lsm=lockdown,yama,apparmor,bpf
-	
-	# the 2 lines are TEMP:
-	BOOT_PARTITION="/dev/disk/by-partlabel/ESP"
-	PRIMARY_PARTITION="/dev/disk/by-partlabel/PRIMARY"
-	# the following line is not temp
-	PRIMARY_PARTITION_UUID="$(blkid -s UUID -o value ${PRIMARY_PARTITION})"
-	echo "================prim1: ${PRIMARY_PARTITION_UUID}"
-	# TODO: grub and grub-btrfs, and luks1?
-	arch-chroot /mnt /bin/bash <<EOFAC
-	echo "${MARKER}Setting up the bootloader... "
-	echo "================prim2: ${PRIMARY_PARTITION_UUID}"
-
-sed -i "s,quiet,quiet rd.luks.name=${PRIMARY_PARTITION_UUID}=cryptroot root=/dev/mapper/${LUKS_MAPPER},g" /etc/default/grub
-
-    # Snapper configuration
+    # Generating locales.
+    echo "Generating locales."
+    locale-gen &>/dev/null
+    
+    # Generating a new initramfs.
+    echo "Creating a new initramfs."
+    mkinitcpio -P &>/dev/null
+    
+    # Snapper configuration.
     echo "Configuring Snapper."
     umount /.snapshots
     rm -r /.snapshots
@@ -352,48 +259,65 @@ sed -i "s,quiet,quiet rd.luks.name=${PRIMARY_PARTITION_UUID}=cryptroot root=/dev
     mkdir /.snapshots
     mount -a
     chmod 750 /.snapshots
-
-# Installing GRUB.
+    
+    # Installing GRUB.
     echo "Installing GRUB on /boot."
-    grub-install --target=x86_64-efi --efi-directory=/boot/ --bootloader-id=GRUB &>/dev/null
-    # Creating grub config file.
+    grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB &>/dev/null
+
+    # Creating GRUB config file.
     echo "Creating GRUB config file."
     grub-mkconfig -o /boot/grub/grub.cfg &>/dev/null
+EOF
+
+# Setting root password.
+print "Setting root password."
+arch-chroot /mnt /bin/passwd
+
+# Setting user password.
+print "Adding user \"${USERNAME}\" to the system with root privileges."
+arch-chroot /mnt useradd -m -G wheel -s /bin/bash "${USERNAME}"
+echo "${USERNAME} ALL=(ALL) ALL" >> /mnt/etc/sudoers
+# sed -i 's/# %wheel ALL=(ALL) ALL/%wheel ALL=(ALL) ALL/' /mnt/etc/sudoers
+print "Setting user password for ${USERNAME}." 
+arch-chroot /mnt /bin/passwd "${USERNAME}"
+
+# Boot backup hook.
+print "Configuring /boot backup when pacman transactions are made."
+mkdir /mnt/etc/pacman.d/hooks
+cat > /mnt/etc/pacman.d/hooks/50-bootbackup.hook <<EOF
+[Trigger]
+Operation = Upgrade
+Operation = Install
+Operation = Remove
+Type = Path
+Target = usr/lib/modules/*/vmlinuz
+
+[Action]
+Depends = rsync
+Description = Backing up /boot...
+When = PostTransaction
+Exec = /usr/bin/rsync -a --delete /boot /.bootbackup
+EOF
+
+# ZRAM configuration.
+# TODO: user ZRAM?
+print "Configuring ZRAM."
+cat > /mnt/etc/systemd/zram-generator.conf <<EOF
+[zram0]
+zram-fraction = 1
+max-zram-size = 8192
+EOF
 
 
-	mkinitcpio -P
+# Enabling various services.
+# TODO: clean this us
+print "Enabling Reflector, automatic snapshots, BTRFS scrubbing and systemd-oomd."
+for service in reflector.timer snapper-timeline.timer snapper-cleanup.timer btrfs-scrub@-.timer btrfs-scrub@home.timer btrfs-scrub@var-log.timer btrfs-scrub@\\x2esnapshots.timer grub-btrfs.path systemd-oomd
+do
+    systemctl enable "$service" --root=/mnt &>/dev/null
+done
+
+# Finishing up.
+umount -a &>/dev/null
+print "The installer script is done."
 exit
-EOFAC
-
-	# echo "${MARKER}Chroot... "
-	# arch-chroot /mnt ./bootloader.sh
-}
-
-
-################################################################################
-# Rebooting.
-# Arguments:
-#   None
-# Outputs:
-#   General status
-###############################################################################
-reboot() {
-	echo "${MARKER}Preparing for reboot... "
-	# exit
-	umount -a
-	shutdown now
-}
-
-
-
-wipe_everything
-internet_connectivity
-boot_mode
-partition_drive
-encrypt_primary_partition
-format_partitions
-create_btrfs_subvolumes
-install_base_packages
-basic_configuration
-bootloader
-# reboot
