@@ -48,20 +48,19 @@
 # The following layout is used, as suggested for Snapper here:
 # https://wiki.archlinux.org/title/Snapper#Suggested_filesystem_layout
 #
-# +------------+-------------+
-# | Name       | Mountpoint  |
-# +------------+-------------+
-# | @          | /           |
-# | @home      | /home       |
-# | @snapshots | /.snapshots |
-# | @var_log   | /var/log    |
-# +------------+-------------+
+# +------------+-----------------------+
+# | Name       | Mountpoint            |
+# +------------+-----------------------+
+# | @          | /                     |
+# | @home      | /home                 |
+# | @snapshots | /.snapshots           |
+# | @var_log   | /var/log              |
+# | @var_pkgs  | /var/cache/pacman/pkg |
+# +------------+-----------------------+
 
 
-# Passwords (ask them to the user).
-ROOT_PASSWORD="asdf"
-USER_PASSWORD="asdf"
-
+USERNAME="pholi"
+HOSTNAME="pholi-arch"
 
 BOOT_LABEL="ESP"
 ROOT_LABEL="ROOT"
@@ -69,10 +68,6 @@ BOOT_PARTITION="/dev/disk/by-partlabel/${BOOT_LABEL}"
 ROOT_PARTITION="/dev/disk/by-partlabel/${ROOT_LABEL}"
 LUKS_MAPPING="cryptroot"
 CRYPTROOT="/dev/mapper/${LUKS_MAPPING}"
-
-# all this is preset
-USERNAME="pholi"
-HOSTNAME="pholi-arch"
 
 
 # Clearing the TTY.
@@ -91,8 +86,9 @@ luks_password () {
         print "You need to enter a password for the LUKS container."
         luks_password
     fi
-    echo -n "${password}" | cryptsetup luksFormat --type luks2 "${ROOT_PARTITION}" -d -
-    echo -n "${password}" | cryptsetup open --type luks2 "${ROOT_PARTITION}" "${LUKS_MAPPING}" -d -    
+	# REMOVED --type luks2 from those 2 lines
+    echo -n "${password}" | cryptsetup luksFormat "${ROOT_PARTITION}" -d -
+    echo -n "${password}" | cryptsetup open "${ROOT_PARTITION}" "${LUKS_MAPPING}" -d -    
 }
 
 
@@ -154,7 +150,7 @@ partprobe "${DEVICE}"
 
 # Formatting the boot partition as FAT32.
 print "Formatting the boot partition as FAT32."
-mkfs.fat -F 32 $BOOT_PARTITION &>/dev/null
+mkfs.fat -F 32 ${BOOT_PARTITION} &>/dev/null
 
 # Creating a LUKS Container for the root partition.
 print "Creating LUKS Container for the root partition."
@@ -183,7 +179,7 @@ mount -o ssd,noatime,compress-force=zstd:3,discard=async,subvol=@snapshots ${CRY
 mount -o ssd,noatime,compress-force=zstd:3,discard=async,subvol=@var_log ${CRYPTROOT} /mnt/var/log
 mount -o ssd,noatime,compress-force=zstd:3,discard=async,subvol=@var_pkgs ${CRYPTROOT} /mnt/var/cache/pacman/pkg
 chattr +C /mnt/var/log
-mount $BOOT_PARTITION /mnt/boot/
+mount ${BOOT_PARTITION} /mnt/boot/
 
 # Pacstrap (setting up a base sytem onto the new root).
 print "Installing the base system (it may take a while)."
@@ -216,9 +212,9 @@ EOF
 # Configuring /etc/mkinitcpio.conf.
 print "Configuring /etc/mkinitcpio.conf."
 # TODO: maybe remove compression
-sed -i "/^MODULES=(/cMODULES=(btrfs)" /etc/mkinitcpio.conf
-sed -i "/^HOOKS=(/cHOOKS=(base systemd autodetect keyboard sd-vconsole modconf block sd-encrypt filesystems)" /etc/mkinitcpio.conf
-sed -i "/^COMPRESSION=(/COMPRESSION=(zstd)" /etc/mkinitcpio.conf
+sed -i "/^MODULES=(/cMODULES=(btrfs)" /mnt/etc/mkinitcpio.conf
+sed -i "/^HOOKS=(/cHOOKS=(base systemd autodetect keyboard sd-vconsole modconf block sd-encrypt filesystems)" /mnt/etc/mkinitcpio.conf
+sed -i "/^COMPRESSION=(/COMPRESSION=(zstd)" /mnt/etc/mkinitcpio.conf
 # cat > /mnt/etc/mkinitcpio.conf <<EOF
 # HOOKS=(base systemd autodetect keyboard sd-vconsole modconf block sd-encrypt filesystems)
 # COMPRESSION=(zstd)
@@ -226,8 +222,8 @@ sed -i "/^COMPRESSION=(/COMPRESSION=(zstd)" /etc/mkinitcpio.conf
 
 # Setting up LUKS2 encryption in GRUB.
 print "Setting up GRUB config."
-UUID=$(blkid -s UUID -o value $ROOT_PARTITION)
-sed -i "s,quiet,quiet rd.luks.name=${UUID}=cryptroot root=${CRYPTROOT},g" /mnt/etc/default/grub
+UUID=$(blkid -s UUID -o value ${ROOT_PARTITION})
+sed -i "s,quiet,quiet rd.luks.name=${UUID}=${LUKS_MAPPING} root=${CRYPTROOT},g" /mnt/etc/default/grub
 
 # Configuring the system.    
 arch-chroot /mnt /bin/bash -e <<EOF
