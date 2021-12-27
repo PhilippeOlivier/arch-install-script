@@ -15,11 +15,11 @@
 # As always, make sure to validate this script against the current official installation guide that
 # can be found on the Arch Wiki, to ensure that the installation proceeds reliably.
 #
-# This script is heavily based off the work of Tommaso Chiti. His script can be found here:
+# This script is a heavily based off the work of Tommaso Chiti. His script can be found here:
 # https://github.com/classy-giraffe/easy-arch
 #
-# This script is custom tailored to my specific needs. If you want a more general script, you should
-# definitely use Tommaso's script.
+# This script is a stripped-down version of Tommaso's script, custom tailored to my specific needs.
+# If you want a more general script, you should definitely use Tommaso's script.
 #
 #
 # Usage
@@ -34,12 +34,12 @@
 # Partitions layout
 # =================
 #
-# +---+---------+---------+------------+------------+
-# | # | Label   | Size    | Mountpoint | Filesystem |
-# +---+---------+---------+------------+------------+
-# | 1 | ESP     | 512 MiB | /boot      | FAT32      |
-# | 2 | PRIMARY | Rest    | /          | Btrfs      |
-# +---+---------+---------+------------+------------+
+# +---+-------+---------+------------+------------+
+# | # | Label | Size    | Mountpoint | Filesystem |
+# +---+-------+---------+------------+------------+
+# | 1 | ESP   | 512 MiB | /boot      | FAT32      |
+# | 2 | ROOT  | Rest    | /          | Btrfs      |
+# +---+-------+---------+------------+------------+
 #
 #
 # Btrfs subvolumes layout
@@ -70,28 +70,13 @@ LUKS_MAPPING="cryptroot"
 CRYPTROOT="/dev/mapper/${LUKS_MAPPING}"
 
 
-# Clearing the TTY.
-clear
-
 # Pretty print.
 print () {
     echo -e "\e[1m\e[93m[ \e[92m•\e[93m ] \e[4m$1\e[0m"
 }
 
-# Setting up a password for the LUKS container.
-luks_password () {
-	local password
-    read -r -s -p "Enter a password for the LUKS container: " password
-    if [[ -z "${password}" ]]; then
-        print "You need to enter a password for the LUKS container."
-        luks_password
-    fi
-	# REMOVED --type luks2 from those 2 lines
-    echo -n "${password}" | cryptsetup luksFormat "${ROOT_PARTITION}" -d -
-    echo -n "${password}" | cryptsetup open "${ROOT_PARTITION}" "${LUKS_MAPPING}" -d -    
-}
 
-
+clear
 print "The script to install Arch Linux begins."
 
 # Making sure that there is internet connectivity.
@@ -116,15 +101,15 @@ fi
 PS3="Select the device where Arch Linux is going to be installed: "
 select ENTRY in $(lsblk -dpnoNAME|grep -P "/dev/sd|nvme|vd");
 do
-    DEVICE=$ENTRY
+    DEVICE=${ENTRY}
     print "Installing Arch Linux on ${DEVICE}."
     break
 done
 
 # Deleting old partition scheme.
-read -r -p "Delete the current partition table on ${DEVICE}? [y/N] " response
-response=${response,,}
-if [[ "${response}" =~ ^(yes|y)$ ]]; then
+read -r -p "Delete the current partition table on ${DEVICE}? [y/N] " RESPONSE
+RESPONSE=${RESPONSE,,}
+if [[ "${RESPONSE}" =~ ^(yes|y)$ ]]; then
     print "Wiping ${DEVICE}."
 	wipefs -af $(lsblk -lpoNAME | grep -P "${DEVICE}" | sort -r) &>/dev/null
     sgdisk -Zo "${DEVICE}" &>/dev/null
@@ -137,12 +122,9 @@ fi
 print "Creating the partitions on ${DEVICE}."
 parted -s "${DEVICE}" \
     mklabel gpt \
-    mkpart ESP fat32 1MiB 513MiB \
+    mkpart ${BOOT_LABEL} fat32 1MiB 513MiB \
     set 1 esp on \
-    mkpart ROOT 513MiB 100% \
-
-BOOT_PARTITION="/dev/disk/by-partlabel/ESP"
-ROOT_PARTITION="/dev/disk/by-partlabel/ROOT"
+    mkpart ${ROOT_LABEL} 513MiB 100% \
 
 # Informing the Kernel of the changes.
 print "Informing the Kernel about the disk changes."
@@ -154,7 +136,9 @@ mkfs.fat -F 32 ${BOOT_PARTITION} &>/dev/null
 
 # Creating a LUKS Container for the root partition.
 print "Creating LUKS Container for the root partition."
-luks_password
+read -r -s -p "Enter a password for the LUKS container: " LUKS_PASSPHRASE
+echo -n "${LUKS_PASSPHRASE}" | cryptsetup luksFormat --type luks2 "${ROOT_PARTITION}" -d -
+echo -n "${LUKS_PASSPHRASE}" | cryptsetup open --type luks2 "${ROOT_PARTITION}" "${LUKS_MAPPING}" -d -    
 
 # Formatting the LUKS Container as Btrfs.
 print "Formatting the LUKS container as Btrfs."
@@ -163,28 +147,33 @@ mount ${CRYPTROOT} /mnt
 
 # Creating Btrfs subvolumes.
 print "Creating Btrfs subvolumes."
-for volume in @ @home @snapshots @var_log @var_pkgs
+for VOLUME in @ @home @snapshots @var_log @var_pkgs
 do
-    btrfs subvolume create /mnt/$volume
+    btrfs subvolume create /mnt/${VOLUME}
 done
 
 # Mounting the newly created subvolumes.
 umount /mnt
 print "Mounting the newly created subvolumes."
-# TODO: change the mount options (noatime, nodiratime(necessary if I have noatime?), space_cache?, ssd?, different compression?, discard_async?)
-mount -o ssd,noatime,compress-force=zstd:3,discard=async,subvol=@ ${CRYPTROOT} /mnt
+# Notes:
+# - The flag `nodiratime` is not necessary, it is implied by `noatime`.
+# - The flag `ssd` is not necessary, as Btrfs will automatically detect if a device is an SSD.
+# - The flag `compress-force=zstd:1` is used instead of `compress=zstd:1`, because: https://www.reddit.com/r/archlinux/comments/npppg5/how_do_i_safely_switch_from_lzo_compression_to/
+# - The flag `discard=async` is not used, and instead fstrim is used.
+BTRFS_MOUNT_OPTIONS="noatime,compress-force=zstd:1,autodefrag,subvol="
+# TODO: before changing the mount options to my variable thing, they were: ssd,noatime,compress-force=zstd:3,discard=async,subvol=@home
+mount -o ${BTRFS_MOUNT_OPTIONS}@ ${CRYPTROOT} /mnt
 mkdir -p /mnt/{home,.snapshots,/var/log,/var/cache/pacman/pkg,boot}
-mount -o ssd,noatime,compress-force=zstd:3,discard=async,subvol=@home ${CRYPTROOT} /mnt/home
-mount -o ssd,noatime,compress-force=zstd:3,discard=async,subvol=@snapshots ${CRYPTROOT} /mnt/.snapshots
-mount -o ssd,noatime,compress-force=zstd:3,discard=async,subvol=@var_log ${CRYPTROOT} /mnt/var/log
-mount -o ssd,noatime,compress-force=zstd:3,discard=async,subvol=@var_pkgs ${CRYPTROOT} /mnt/var/cache/pacman/pkg
+mount -o ${BTRFS_MOUNT_OPTIONS}@home ${CRYPTROOT} /mnt/home
+mount -o ${BTRFS_MOUNT_OPTIONS}@snapshots ${CRYPTROOT} /mnt/.snapshots
+mount -o ${BTRFS_MOUNT_OPTIONS}@var_log ${CRYPTROOT} /mnt/var/log
+mount -o ${BTRFS_MOUNT_OPTIONS}@var_pkgs ${CRYPTROOT} /mnt/var/cache/pacman/pkg
 chattr +C /mnt/var/log
-mount ${BOOT_PARTITION} /mnt/boot/
+mount ${BOOT_PARTITION} /mnt/boot
 
 # Pacstrap (setting up a base sytem onto the new root).
 print "Installing the base system (it may take a while)."
-# TODO: remove some packages, add base-devel, etc. My own list was: base base-devel btrfs-progs efibootmgr grub grub-btrfs intel-ucode linux linux-firmware linux-lts snap-pac snapper (linux-lts not necessary anymore because of snapshots)
-pacstrap /mnt base linux intel-ucode linux-firmware linux-headers btrfs-progs grub grub-btrfs rsync efibootmgr snapper reflector base-devel snap-pac zram-generator
+pacstrap /mnt base base-devel btrfs-progs efibootmgr grub grub-btrfs intel-ucode linux linux-firmware linux-headers rsync snapper snap-pac zram-generator
 
 # Setting up the hostname.
 echo "${HOSTNAME}" > /mnt/etc/hostname
@@ -194,7 +183,6 @@ print "Generating a new fstab."
 genfstab -U /mnt >> /mnt/etc/fstab
 
 # Setting up the locale.
-# echo "en_CA.UTF-8 UTF-8"  > /mnt/etc/locale.gen
 sed -i "/^#en_CA.UTF-8 UTF-8/cen_CA.UTF-8 UTF-8" /mnt/etc/locale.gen
 echo "LANG=en_CA.UTF-8" > /mnt/etc/locale.conf
 
@@ -211,14 +199,9 @@ EOF
 
 # Configuring /etc/mkinitcpio.conf.
 print "Configuring /etc/mkinitcpio.conf."
-# TODO: maybe remove compression
 sed -i "/^MODULES=(/cMODULES=(btrfs)" /mnt/etc/mkinitcpio.conf
 sed -i "/^HOOKS=(/cHOOKS=(base systemd autodetect keyboard sd-vconsole modconf block sd-encrypt filesystems)" /mnt/etc/mkinitcpio.conf
-sed -i "/^COMPRESSION=(/COMPRESSION=(zstd)" /mnt/etc/mkinitcpio.conf
-# cat > /mnt/etc/mkinitcpio.conf <<EOF
-# HOOKS=(base systemd autodetect keyboard sd-vconsole modconf block sd-encrypt filesystems)
-# COMPRESSION=(zstd)
-# EOF
+sed -i "/^COMPRESSION=(/cCOMPRESSION=(zstd)" /mnt/etc/mkinitcpio.conf
 
 # Setting up LUKS2 encryption in GRUB.
 print "Setting up GRUB config."
@@ -273,7 +256,6 @@ arch-chroot /mnt /bin/passwd
 print "Adding user \"${USERNAME}\" to the system with root privileges."
 arch-chroot /mnt useradd -m -G wheel -s /bin/bash "${USERNAME}"
 echo "${USERNAME} ALL=(ALL) ALL" >> /mnt/etc/sudoers
-# sed -i 's/# %wheel ALL=(ALL) ALL/%wheel ALL=(ALL) ALL/' /mnt/etc/sudoers
 print "Setting user password for ${USERNAME}." 
 arch-chroot /mnt /bin/passwd "${USERNAME}"
 
@@ -296,21 +278,18 @@ Exec = /usr/bin/rsync -a --delete /boot /.bootbackup
 EOF
 
 # ZRAM configuration.
-# TODO: user ZRAM?
-print "Configuring ZRAM."
+print "Configuring zram."
 cat > /mnt/etc/systemd/zram-generator.conf <<EOF
 [zram0]
 zram-fraction = 1
 max-zram-size = 8192
 EOF
 
-
 # Enabling various services.
-# TODO: clean this us
-print "Enabling Reflector, automatic snapshots, BTRFS scrubbing and systemd-oomd."
-for service in reflector.timer snapper-timeline.timer snapper-cleanup.timer btrfs-scrub@-.timer btrfs-scrub@home.timer btrfs-scrub@var-log.timer btrfs-scrub@\\x2esnapshots.timer grub-btrfs.path systemd-oomd
+print "Enabling automatic snapshots, Btrfs scrubbing, and systemd-oomd."
+for SERVICE in snapper-timeline.timer snapper-cleanup.timer btrfs-scrub@-.timer btrfs-scrub@home.timer btrfs-scrub@var-log.timer btrfs-scrub@\\x2esnapshots.timer grub-btrfs.path systemd-oomd
 do
-    systemctl enable "$service" --root=/mnt &>/dev/null
+    systemctl enable "${SERVICE}" --root=/mnt &>/dev/null
 done
 
 # Finishing up.
