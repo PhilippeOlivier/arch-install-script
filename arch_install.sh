@@ -173,7 +173,7 @@ mount ${BOOT_PARTITION} /mnt/boot
 
 # Pacstrap (setting up a base sytem onto the new root).
 print "Installing the base system (it may take a while)."
-pacstrap /mnt base base-devel btrfs-progs efibootmgr grub grub-btrfs intel-ucode linux linux-firmware linux-headers rsync snapper snap-pac zram-generator
+pacstrap /mnt base base-devel btrfs-progs efibootmgr grub grub-btrfs intel-ucode iwd linux linux-firmware linux-headers rsync snapper snap-pac zram-generator
 
 # Setting up the hostname.
 echo "${HOSTNAME}" > /mnt/etc/hostname
@@ -285,9 +285,28 @@ zram-fraction = 1
 max-zram-size = 8192
 EOF
 
+# Configuration of network interfaces through systemd-networkd.
+WIRED_INTERFACE=$(ls /mnt/sys/class/net | grep enp)
+cat > /mnt/etc/systemd/network/20-wired.network <<EOF
+[Match]
+Name=${WIRED_INTERFACE}
+
+[Network]
+DHCP=yes
+EOF
+
+WIRELESS_INTERFACE=$(ls /mnt/sys/class/net | grep wl)
+cat > /mnt/etc/systemd/network/25-wireless.network <<EOF
+[Match]
+Name=${WIRELESS_INTERFACE}
+
+[Network]
+DHCP=yes
+EOF
+
 # Enabling various services.
-print "Enabling automatic snapshots, Btrfs scrubbing, and systemd-oomd."
-for SERVICE in snapper-timeline.timer snapper-cleanup.timer btrfs-scrub@-.timer btrfs-scrub@home.timer btrfs-scrub@var-log.timer btrfs-scrub@\\x2esnapshots.timer grub-btrfs.path systemd-oomd
+print "Enabling automatic snapshots, Btrfs scrubbing, systemd-oomd, and network services."
+for SERVICE in snapper-timeline.timer snapper-cleanup.timer btrfs-scrub@-.timer btrfs-scrub@home.timer btrfs-scrub@var-log.timer btrfs-scrub@\\x2esnapshots.timer grub-btrfs.path systemd-oomd iwd.service
 do
     systemctl enable "${SERVICE}" --root=/mnt &>/dev/null
 done
