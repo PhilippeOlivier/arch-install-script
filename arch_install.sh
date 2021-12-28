@@ -286,7 +286,7 @@ max-zram-size = 8192
 EOF
 
 # Configuration of network interfaces through systemd-networkd.
-WIRED_INTERFACE=$(ls /mnt/sys/class/net | grep enp)
+WIRED_INTERFACE=$(ls /sys/class/net | grep enp)
 cat > /mnt/etc/systemd/network/20-wired.network <<EOF
 [Match]
 Name=${WIRED_INTERFACE}
@@ -295,7 +295,7 @@ Name=${WIRED_INTERFACE}
 DHCP=yes
 EOF
 
-WIRELESS_INTERFACE=$(ls /mnt/sys/class/net | grep wl)
+WIRELESS_INTERFACE=$(ls /sys/class/net | grep wl)
 cat > /mnt/etc/systemd/network/25-wireless.network <<EOF
 [Match]
 Name=${WIRELESS_INTERFACE}
@@ -306,7 +306,7 @@ EOF
 
 # Enabling various services.
 print "Enabling automatic snapshots, Btrfs scrubbing, systemd-oomd, and network services."
-for SERVICE in snapper-timeline.timer snapper-cleanup.timer btrfs-scrub@-.timer btrfs-scrub@home.timer btrfs-scrub@var-log.timer btrfs-scrub@\\x2esnapshots.timer grub-btrfs.path systemd-oomd iwd.service
+for SERVICE in snapper-timeline.timer snapper-cleanup.timer btrfs-scrub@-.timer btrfs-scrub@home.timer btrfs-scrub@var-log.timer btrfs-scrub@\\x2esnapshots.timer grub-btrfs.path systemd-oomd systemd-networkd.service systemd-resolved.service iwd.service
 do
     systemctl enable "${SERVICE}" --root=/mnt &>/dev/null
 done
