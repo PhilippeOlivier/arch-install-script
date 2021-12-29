@@ -304,6 +304,9 @@ Name=${WIRELESS_INTERFACE}
 DHCP=yes
 EOF
 
+# Configuring systemd-resolved.
+sed -i "/^#DNS=/cDNS=8.8.8.8" /mnt/etc/systemd/resolved.conf
+
 # Enabling various services.
 print "Enabling automatic snapshots, Btrfs scrubbing, systemd-oomd, and network services."
 for SERVICE in snapper-timeline.timer snapper-cleanup.timer btrfs-scrub@-.timer btrfs-scrub@home.timer btrfs-scrub@var-log.timer btrfs-scrub@\\x2esnapshots.timer grub-btrfs.path systemd-oomd systemd-networkd.service systemd-resolved.service iwd.service
